@@ -133,20 +133,6 @@ Active instructions:
 
 Instructions are probabilistic guidance - they influence LLM behavior but don't guarantee it. Do NOT rely on instructions for security-critical operations. Use deterministic code checks, hooks, or tool-level validation instead.
 
-## Example Use Cases
-
-This client is **generic** - it works with any MCP server. Example scenarios:
-
-| Use Case | Server | Capabilities Used |
-|----------|--------|-------------------|
-| **Email assistant** | comms-assistant-server → gmail-mcp | sampling.tools |
-| **Code review bot** | github-mcp | sampling, elicitation |
-| **File browser** | filesystem-mcp | roots, subscriptions |
-| **Database explorer** | postgres-mcp | completions, logging |
-| **CI/CD monitor** | jenkins-mcp | list-changed, subscriptions |
-
-The client has zero domain knowledge - all workflow logic lives in the server.
-
 ## Design Principles
 
 1. **Each file is standalone** - No dependencies between capabilities
