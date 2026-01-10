@@ -37,8 +37,10 @@ import type { MessageParam, ContentBlockParam, ToolUseBlock, ToolResultBlockPara
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   CreateMessageRequestSchema,
+  type CreateMessageRequest,
   type CreateMessageResult,
   type CreateMessageResultWithTools,
+  type CreateTaskResult,
   type SamplingMessage,
   type Tool,
   type ToolChoice,
@@ -47,6 +49,7 @@ import {
   type TextContent,
   type ImageContent,
 } from '@modelcontextprotocol/sdk/types.js';
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 
 // Union type for sampling responses - supports both text-only and tool-use cases
 type SamplingResponse = CreateMessageResult | CreateMessageResultWithTools;
@@ -232,6 +235,125 @@ function mapStopReason(anthropicReason: string | null): string | undefined {
 // ============================================================================
 
 /**
+ * Context passed to executeSampling for the core LLM call.
+ */
+interface SamplingContext {
+  anthropic: Anthropic;
+  model: string;
+  defaultMaxTokens: number;
+  serverInstructions?: string;
+  log: (msg: string) => void;
+  onResponse: (response: SamplingResponse) => void;
+}
+
+/**
+ * Execute the core sampling logic (LLM API call).
+ * Extracted to support both sync and async (task-based) execution.
+ */
+async function executeSampling(
+  params: CreateMessageRequest['params'],
+  ctx: SamplingContext
+): Promise<SamplingResponse> {
+  const { anthropic, model, defaultMaxTokens, serverInstructions, log, onResponse } = ctx;
+  const hasTools = params.tools && params.tools.length > 0;
+
+  // Combine server instructions with request's system prompt
+  const fullSystemPrompt = [serverInstructions, params.systemPrompt]
+    .filter(Boolean)
+    .join('\n\n') || undefined;
+
+  // Convert MCP messages to Anthropic format
+  const messages: MessageParam[] = params.messages.map((msg: SamplingMessage) => ({
+    role: msg.role as 'user' | 'assistant',
+    content: formatMessageContent(msg.content),
+  }));
+
+  // Build Anthropic API request
+  const apiRequest: Anthropic.MessageCreateParams = {
+    model,
+    max_tokens: params.maxTokens ?? defaultMaxTokens,
+    messages,
+    system: fullSystemPrompt
+      ? [
+          {
+            type: 'text' as const,
+            text: fullSystemPrompt,
+            cache_control: { type: 'ephemeral' as const },
+          },
+        ]
+      : undefined,
+    temperature: params.temperature,
+    stop_sequences: params.stopSequences,
+  };
+
+  // Add tools if provided (and toolChoice is not 'none')
+  if (hasTools && params.toolChoice?.mode !== 'none') {
+    apiRequest.tools = params.tools!.map(mcpToolToAnthropic);
+
+    if (params.toolChoice) {
+      apiRequest.tool_choice = mcpToolChoiceToAnthropic(params.toolChoice);
+    }
+  }
+
+  // Make API call
+  const response = await anthropic.messages.create(apiRequest);
+
+  // Handle tool use response
+  if (response.stop_reason === 'tool_use') {
+    const toolUseBlocks = response.content
+      .filter((block): block is ToolUseBlock => block.type === 'tool_use')
+      .map(anthropicToolUseToMcp);
+
+    log(`[Sampling] LLM requested ${toolUseBlocks.length} tool(s): ${toolUseBlocks.map(t => t.name).join(', ')}`);
+
+    const result: CreateMessageResultWithTools = {
+      role: 'assistant',
+      content: toolUseBlocks,
+      model: response.model,
+      stopReason: 'toolUse',
+    };
+
+    onResponse(result);
+    return result;
+  }
+
+  // Handle text response
+  const textBlock = response.content.find(c => c.type === 'text');
+  log(`[Sampling] LLM returned text response (stopReason: ${response.stop_reason})`);
+
+  const result: CreateMessageResult = {
+    role: 'assistant',
+    content: {
+      type: 'text',
+      text: textBlock?.type === 'text' ? textBlock.text : '',
+    },
+    model: response.model,
+    stopReason: mapStopReason(response.stop_reason),
+  };
+
+  onResponse(result);
+  return result;
+}
+
+/**
+ * Check if request has task params.
+ * The SDK adds `task` to params when caller provides it in options.
+ * Also check _meta.task for backwards compatibility with servers using the older pattern.
+ */
+function hasTaskParams(params: unknown): boolean {
+  if (typeof params !== 'object' || params === null) return false;
+  const p = params as Record<string, unknown>;
+  // Check direct params.task (SDK pattern)
+  if (p.task !== undefined) return true;
+  // Check _meta.task (backwards compat)
+  if (p._meta && typeof p._meta === 'object') {
+    const meta = p._meta as Record<string, unknown>;
+    if (meta.task !== undefined) return true;
+  }
+  return false;
+}
+
+/**
  * Set up sampling capability on a client.
  *
  * The client must declare `sampling: { tools: {} }` in its capabilities
@@ -258,13 +380,31 @@ export function setupSampling(client: Client, config: SamplingConfig = {}): void
   const approvalMode = config.approvalMode ?? 'ask';
   const serverInstructions = config.serverInstructions;
 
-  client.setRequestHandler(CreateMessageRequestSchema, async (request) => {
+  // Context for executeSampling
+  const samplingCtx: SamplingContext = {
+    anthropic,
+    model,
+    defaultMaxTokens,
+    serverInstructions,
+    log,
+    onResponse,
+  };
+
+  // Handler receives extra from SDK which includes taskStore if client was configured with one
+  client.setRequestHandler(CreateMessageRequestSchema, async (request, extra) => {
     const { params } = request;
 
     const hasTools = params.tools && params.tools.length > 0;
     log(`[Sampling] Server requested LLM completion${hasTools ? ` with ${params.tools!.length} tools` : ''}`);
 
-    // Combine server instructions with request's system prompt
+    // Check if this is a task-based request
+    // The SDK adds `task` to params when server sends task creation options
+    const isTaskRequest = hasTaskParams(params) && extra.taskStore;
+    if (isTaskRequest) {
+      log(`[Sampling] Task-based request detected (ttl: ${extra.taskRequestedTtl ?? 'default'})`);
+    }
+
+    // Combine server instructions with request's system prompt for approval display
     const fullSystemPrompt = [serverInstructions, params.systemPrompt]
       .filter(Boolean)
       .join('\n\n') || undefined;
@@ -290,82 +430,43 @@ export function setupSampling(client: Client, config: SamplingConfig = {}): void
           model: 'rejected',
           stopReason: 'endTurn',
         };
+        // For task requests, we still need to store the rejection as a task result
+        if (isTaskRequest && extra.taskStore) {
+          const task = await extra.taskStore.createTask({ ttl: extra.taskRequestedTtl ?? undefined });
+          await extra.taskStore.storeTaskResult(task.taskId, 'completed', result);
+          log(`[Sampling] Task ${task.taskId}: Request rejected by user`);
+          return { task } as CreateTaskResult;
+        }
         return result;
       }
       log('[Sampling] Request approved, sending to LLM...');
     }
 
-    // Convert MCP messages to Anthropic format
-    const messages: MessageParam[] = params.messages.map((msg: SamplingMessage) => ({
-      role: msg.role as 'user' | 'assistant',
-      content: formatMessageContent(msg.content),
-    }));
+    // Execute the LLM call
+    const executeAndReturn = async (): Promise<SamplingResponse | CreateTaskResult> => {
+      // If task-based request, create task and store result
+      if (isTaskRequest && extra.taskStore) {
+        const task = await extra.taskStore.createTask({ ttl: extra.taskRequestedTtl ?? undefined });
+        log(`[Sampling] Task ${task.taskId}: Starting LLM call...`);
 
-    // Build Anthropic API request
-    const apiRequest: Anthropic.MessageCreateParams = {
-      model,
-      max_tokens: params.maxTokens ?? defaultMaxTokens,
-      messages,
-      system: fullSystemPrompt
-        ? [
-            {
-              type: 'text' as const,
-              text: fullSystemPrompt,
-              cache_control: { type: 'ephemeral' as const },
-            },
-          ]
-        : undefined,
-      temperature: params.temperature,
-      stop_sequences: params.stopSequences,
-    };
+        // Update task status to show we're working
+        await extra.taskStore.updateTaskStatus(task.taskId, 'working', 'Calling LLM API...');
 
-    // Add tools if provided (and toolChoice is not 'none')
-    if (hasTools && params.toolChoice?.mode !== 'none') {
-      apiRequest.tools = params.tools!.map(mcpToolToAnthropic);
+        // Execute the sampling
+        const result = await executeSampling(params, samplingCtx);
 
-      if (params.toolChoice) {
-        apiRequest.tool_choice = mcpToolChoiceToAnthropic(params.toolChoice);
+        // Store the result and return CreateTaskResult
+        await extra.taskStore.storeTaskResult(task.taskId, 'completed', result);
+        log(`[Sampling] Task ${task.taskId}: LLM call completed`);
+
+        return { task } as CreateTaskResult;
       }
-    }
 
-    // Make API call
-    const response = await anthropic.messages.create(apiRequest);
-
-    // Handle tool use response
-    if (response.stop_reason === 'tool_use') {
-      const toolUseBlocks = response.content
-        .filter((block): block is ToolUseBlock => block.type === 'tool_use')
-        .map(anthropicToolUseToMcp);
-
-      log(`[Sampling] LLM requested ${toolUseBlocks.length} tool(s): ${toolUseBlocks.map(t => t.name).join(', ')}`);
-
-      const result: CreateMessageResultWithTools = {
-        role: 'assistant',
-        content: toolUseBlocks,
-        model: response.model,
-        stopReason: 'toolUse',
-      };
-
-      onResponse(result);
-      return result;
-    }
-
-    // Handle text response
-    const textBlock = response.content.find(c => c.type === 'text');
-    log(`[Sampling] LLM returned text response (stopReason: ${response.stop_reason})`);
-
-    const result: CreateMessageResult = {
-      role: 'assistant',
-      content: {
-        type: 'text',
-        text: textBlock?.type === 'text' ? textBlock.text : '',
-      },
-      model: response.model,
-      stopReason: mapStopReason(response.stop_reason),
+      // Synchronous execution (no task params)
+      return executeSampling(params, samplingCtx);
     };
 
-    onResponse(result);
-    return result;
+    return executeAndReturn();
   });
 }
 

@@ -29,3 +29,21 @@ export {
   type CompletionRef,
   type CompletionContext,
 } from './completions.js';
+export {
+  serverSupportsTasks,
+  getToolTaskSupport,
+  shouldUseTaskMode,
+  callToolWithTaskSupport,
+  callToolAuto,
+  listTasks,
+  getTask,
+  cancelTask,
+  formatTaskForDisplay,
+  formatTaskStatusLine,
+  type TaskCallbacks,
+  type TaskSupportLevel,
+} from './tasks.js';
+export {
+  setupClientTasks,
+  type ClientTasksConfig,
+} from './client-tasks.js';

@@ -18,7 +18,7 @@
 
 import { createInterface } from 'node:readline';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { ElicitRequestSchema, type ElicitResult } from '@modelcontextprotocol/sdk/types.js';
+import { ElicitRequestSchema, type ElicitResult, type ElicitRequest, type CreateTaskResult } from '@modelcontextprotocol/sdk/types.js';
 import { log } from '../logging.js';
 
 // ============================================================================
@@ -30,6 +30,8 @@ export interface ElicitationConfig {
   onForm?: (message: string, schema?: Record<string, unknown>) => Promise<ElicitResult>;
   /** Custom handler for URL mode (default: log URL to console) */
   onUrl?: (url: string, message: string) => Promise<ElicitResult>;
+  /** Log callback for status messages */
+  onLog?: (message: string) => void;
 }
 
 // Re-export the SDK type for convenience
@@ -40,19 +42,83 @@ export type { ElicitResult as ElicitationResult };
 // ============================================================================
 
 /**
+ * Check if request has task params.
+ * The SDK adds `task` to params when server sends task creation options.
+ * Also check _meta.task for backwards compatibility with servers using the older pattern.
+ */
+function hasTaskParams(params: unknown): boolean {
+  if (typeof params !== 'object' || params === null) return false;
+  const p = params as Record<string, unknown>;
+  // Check direct params.task (SDK pattern)
+  if (p.task !== undefined) return true;
+  // Check _meta.task (backwards compat)
+  if (p._meta && typeof p._meta === 'object') {
+    const meta = p._meta as Record<string, unknown>;
+    if (meta.task !== undefined) return true;
+  }
+  return false;
+}
+
+/**
+ * Execute the core elicitation logic.
+ * Extracted to support both sync and async (task-based) execution.
+ */
+async function executeElicitation(
+  params: ElicitRequest['params'],
+  config: ElicitationConfig
+): Promise<ElicitResult> {
+  if (params.mode === 'url') {
+    return handleUrlMode(params, config.onUrl);
+  }
+  return handleFormMode(params, config.onForm);
+}
+
+/**
  * Set up elicitation capability on a client.
  *
  * The client must declare `elicitation: { form: {}, url: {} }` in its capabilities.
  */
 export function setupElicitation(client: Client, config: ElicitationConfig = {}): void {
-  client.setRequestHandler(ElicitRequestSchema, async (request) => {
+  const logMsg = config.onLog ?? log;
+
+  // Handler receives extra from SDK which includes taskStore if client was configured with one
+  client.setRequestHandler(ElicitRequestSchema, async (request, extra) => {
     const { params } = request;
 
-    if (params.mode === 'url') {
-      return handleUrlMode(params, config.onUrl);
+    logMsg(`[Elicitation] Server requested user input (mode: ${params.mode ?? 'form'})`);
+
+    // Check if this is a task-based request
+    // The SDK adds `task` to params when server sends task creation options
+    const isTaskRequest = hasTaskParams(params) && extra.taskStore;
+    if (isTaskRequest) {
+      logMsg(`[Elicitation] Task-based request detected (ttl: ${extra.taskRequestedTtl ?? 'default'})`);
     }
 
-    return handleFormMode(params, config.onForm);
+    // Execute elicitation and optionally wrap in task
+    const executeAndReturn = async (): Promise<ElicitResult | CreateTaskResult> => {
+      if (isTaskRequest && extra.taskStore) {
+        // Create task for async execution
+        const task = await extra.taskStore.createTask({ ttl: extra.taskRequestedTtl ?? undefined });
+        logMsg(`[Elicitation] Task ${task.taskId}: Waiting for user input...`);
+
+        // Update task status to show we're waiting for input
+        await extra.taskStore.updateTaskStatus(task.taskId, 'input_required', 'Waiting for user input...');
+
+        // Execute the elicitation (this may block waiting for user input)
+        const result = await executeElicitation(params, config);
+
+        // Store the result and return CreateTaskResult
+        await extra.taskStore.storeTaskResult(task.taskId, 'completed', result);
+        logMsg(`[Elicitation] Task ${task.taskId}: User input received`);
+
+        return { task } as CreateTaskResult;
+      }
+
+      // Synchronous execution (no task params)
+      return executeElicitation(params, config);
+    };
+
+    return executeAndReturn();
   });
 }
 

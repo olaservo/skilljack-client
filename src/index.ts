@@ -11,6 +11,7 @@
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTaskStore } from '@modelcontextprotocol/sdk/experimental/tasks/stores/in-memory.js';
 import { createInterface } from 'node:readline';
 import 'dotenv/config';
 
@@ -41,6 +42,17 @@ import {
   completeResourceArgument,
   pickCompletion,
 } from './capabilities/completions.js';
+import {
+  serverSupportsTasks,
+  shouldUseTaskMode,
+  callToolWithTaskSupport,
+  listTasks,
+  getTask,
+  cancelTask,
+  formatTaskForDisplay,
+  formatTaskStatusLine,
+} from './capabilities/tasks.js';
+import { setupClientTasks } from './capabilities/client-tasks.js';
 import { setupListChanged } from './capabilities/list-changed.js';
 import { setupSubscriptions, serverSupportsSubscriptions } from './capabilities/subscriptions.js';
 
@@ -198,15 +210,38 @@ Conformance testing:
   if (enableSampling) capabilities.sampling = { tools: {} };
   if (roots.length) capabilities.roots = { listChanged: true };
   capabilities.elicitation = { form: {} };
+  // Task capabilities - both for calling server tools as tasks AND for executing
+  // server-initiated requests (sampling/elicitation) as client-side tasks
+  capabilities.tasks = {
+    list: {},
+    cancel: {},
+    requests: {
+      sampling: { createMessage: {} },
+      elicitation: { create: {} },
+    },
+  };
 
-  // Create client
+  // Create task store for client-side task support
+  // This enables the SDK to provide extra.taskStore to request handlers
+  const clientTaskStore = new InMemoryTaskStore();
+
+  // Create client with task store
   const client = new Client(
     { name: 'mcp-skilljack-client', version: '0.1.0' },
-    { capabilities }
+    { capabilities, taskStore: clientTaskStore }
   );
 
+  // Set up client-side task request handlers (tasks/get, tasks/result, etc.)
+  // This allows the server to poll for task status and retrieve results
+  setupClientTasks(client, {
+    onLog: (msg: string) => log(msg),
+  });
+
   // Set up capabilities that don't need server instructions
-  setupElicitation(client);
+  // The SDK provides extra.taskStore to handlers automatically via the taskStore option above
+  setupElicitation(client, {
+    onLog: (msg: string) => log(msg),
+  });
 
   if (roots.length) {
     setupRoots(client, roots);
@@ -256,6 +291,7 @@ Conformance testing:
   logInstructions(instructionsResult);
 
   // Set up sampling with combined instructions (after connect so we have server info)
+  // The SDK provides extra.taskStore to handlers automatically via the taskStore option above
   if (enableSampling) {
     setupSampling(client, {
       apiKey: process.env.ANTHROPIC_API_KEY,
@@ -336,10 +372,12 @@ Conformance testing:
     });
   }
 
-  // List capabilities
+  // List capabilities and store for later use
+  let toolsList: Awaited<ReturnType<typeof client.listTools>>['tools'] = [];
   try {
     const tools = await client.listTools();
-    log('Tools:', tools.tools.map(t => t.name).join(', ') || 'none');
+    toolsList = tools.tools;
+    log('Tools:', toolsList.map(t => t.name).join(', ') || 'none');
   } catch { /* server may not support */ }
 
   try {
@@ -362,6 +400,11 @@ Conformance testing:
     log('Subscriptions: supported');
   }
 
+  // Show tasks support
+  if (serverSupportsTasks(client)) {
+    log('Tasks: supported');
+  }
+
   // Set logging level if server supports it
   if (serverSupportsLogging(client)) {
     await setLoggingLevel(client, logLevel);
@@ -369,7 +412,7 @@ Conformance testing:
   }
 
   log('\nCommands:');
-  log('  call <tool> [json]                  - Call a tool');
+  log('  call <tool> [json]                  - Call a tool (auto-detects task support)');
   log('  read <uri>                          - Read a resource');
   log('  subscribe <uri>                     - Subscribe to resource updates');
   log('  unsubscribe <uri>                   - Unsubscribe from resource updates');
@@ -378,6 +421,9 @@ Conformance testing:
   log('  pick prompt <name> <arg>            - Interactive prompt completion picker');
   log('  pick resource <uri> <arg>           - Interactive resource completion picker');
   log('  loglevel <level>                    - Change logging level');
+  log('  tasks                               - List all active tasks');
+  log('  task <id>                           - Get task status');
+  log('  cancel <id>                         - Cancel a running task');
   log('  quit                                - Exit\n');
 
   // Interactive loop
@@ -391,12 +437,32 @@ Conformance testing:
 
     try {
       if (cmd === 'call' && rest[0]) {
+        const toolName = rest[0];
         const args = rest.slice(1).join(' ');
-        const result = await client.callTool({
-          name: rest[0],
-          arguments: args ? JSON.parse(args) : {},
-        });
-        log(JSON.stringify(result, null, 2));
+        const parsedArgs = args ? JSON.parse(args) : {};
+
+        // Check if tool supports tasks
+        const tool = toolsList.find(t => t.name === toolName);
+        if (tool && shouldUseTaskMode(client, tool)) {
+          // Use task-enabled tool call with progress updates
+          log(`[Tasks] Tool "${toolName}" supports tasks - using streaming mode`);
+          const result = await callToolWithTaskSupport(client, toolName, parsedArgs, {
+            onTaskCreated: (task) => {
+              log(`[Task] Created: ${task.taskId}`);
+            },
+            onTaskStatus: (task) => {
+              log(`[Task] Status: ${task.status}${task.statusMessage ? ` - ${task.statusMessage}` : ''}`);
+            },
+          });
+          log(JSON.stringify(result, null, 2));
+        } else {
+          // Regular tool call
+          const result = await client.callTool({
+            name: toolName,
+            arguments: parsedArgs,
+          });
+          log(JSON.stringify(result, null, 2));
+        }
       } else if (cmd === 'read' && rest[0]) {
         const result = await client.readResource({ uri: rest[0] });
         log(JSON.stringify(result, null, 2));
@@ -464,10 +530,44 @@ Conformance testing:
           log(`Invalid level: ${rest[0]}`);
           log(`Available: ${LOGGING_LEVELS.join(', ')}`);
         }
+      } else if (cmd === 'tasks') {
+        // List all active tasks
+        if (!serverSupportsTasks(client)) {
+          log('Server does not support tasks');
+        } else {
+          const result = await listTasks(client);
+          if (result.tasks.length === 0) {
+            log('No active tasks');
+          } else {
+            log('Active tasks:');
+            for (const task of result.tasks) {
+              log(formatTaskStatusLine(task));
+            }
+            if (result.nextCursor) {
+              log(`  (more tasks available, cursor: ${result.nextCursor})`);
+            }
+          }
+        }
+      } else if (cmd === 'task' && rest[0]) {
+        // Get specific task status
+        if (!serverSupportsTasks(client)) {
+          log('Server does not support tasks');
+        } else {
+          const task = await getTask(client, rest[0]);
+          log(formatTaskForDisplay(task));
+        }
+      } else if (cmd === 'cancel' && rest[0]) {
+        // Cancel a running task
+        if (!serverSupportsTasks(client)) {
+          log('Server does not support tasks');
+        } else {
+          await cancelTask(client, rest[0]);
+          log(`Task ${rest[0]} cancelled`);
+        }
       } else if (cmd === 'quit' || cmd === 'exit') {
         running = false;
       } else if (cmd) {
-        log('Type "quit" to exit. Available commands: call, read, subscribe, unsubscribe, complete, pick, loglevel');
+        log('Type "quit" to exit. Available commands: call, read, subscribe, unsubscribe, complete, pick, loglevel, tasks, task, cancel');
       }
     } catch (e) {
       logError('Error:', e instanceof Error ? e.message : e);
