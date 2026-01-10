@@ -451,6 +451,21 @@ import { setupListChanged, type ListChangedCallbacks } from './capabilities/list
 import { setupSubscriptions } from './capabilities/subscriptions.js';
 
 /**
+ * Generic helper to apply a setup function to all connected clients.
+ *
+ * @param clients - Map of connected clients
+ * @param setup - Setup function receiving serverName and client
+ */
+function setupForAllClients(
+  clients: Map<string, Client>,
+  setup: (serverName: string, client: Client) => void
+): void {
+  for (const [serverName, client] of clients.entries()) {
+    setup(serverName, client);
+  }
+}
+
+/**
  * Server-aware sampling callbacks.
  * Each callback receives the server name as the first argument.
  */
@@ -478,7 +493,7 @@ export function setupSamplingForAll(
 ): void {
   const { callbacks, ...baseConfig } = config;
 
-  for (const [serverName, client] of clients.entries()) {
+  setupForAllClients(clients, (serverName, client) => {
     setupSampling(client, {
       ...baseConfig,
       onApprovalRequest: callbacks?.onApprovalRequest
@@ -491,7 +506,7 @@ export function setupSamplingForAll(
         ? (message) => callbacks.onLog!(serverName, message)
         : undefined,
     });
-  }
+  });
 }
 
 /**
@@ -512,18 +527,16 @@ export function setupElicitationForAll(
   clients: Map<string, Client>,
   config: MultiServerElicitationConfig = {}
 ): void {
-  for (const [serverName, client] of clients.entries()) {
-    const elicitConfig: ElicitationConfig = {};
-
-    if (config.onForm) {
-      elicitConfig.onForm = (message, schema) => config.onForm!(serverName, message, schema);
-    }
-    if (config.onUrl) {
-      elicitConfig.onUrl = (url, message) => config.onUrl!(serverName, url, message);
-    }
-
-    setupElicitation(client, elicitConfig);
-  }
+  setupForAllClients(clients, (serverName, client) => {
+    setupElicitation(client, {
+      onForm: config.onForm
+        ? (message, schema) => config.onForm!(serverName, message, schema)
+        : undefined,
+      onUrl: config.onUrl
+        ? (url, message) => config.onUrl!(serverName, url, message)
+        : undefined,
+    });
+  });
 }
 
 /**
@@ -535,9 +548,7 @@ export function setupElicitationForAll(
  * @param paths - Filesystem paths to expose
  */
 export function setupRootsForAll(clients: Map<string, Client>, paths: string[]): void {
-  for (const client of clients.values()) {
-    setupRoots(client, paths);
-  }
+  setupForAllClients(clients, (_serverName, client) => setupRoots(client, paths));
 }
 
 /**
@@ -560,11 +571,9 @@ export function setupLoggingForAll(
   clients: Map<string, Client>,
   onLogMessage: MultiServerLogCallback
 ): void {
-  for (const [serverName, client] of clients.entries()) {
-    setupLogging(client, (level, logger, data) => {
-      onLogMessage(serverName, level, logger, data);
-    });
-  }
+  setupForAllClients(clients, (serverName, client) => {
+    setupLogging(client, (level, logger, data) => onLogMessage(serverName, level, logger, data));
+  });
 }
 
 /**
@@ -586,21 +595,19 @@ export function setupListChangedForAll(
   clients: Map<string, Client>,
   callbacks: MultiServerListChangedCallbacks
 ): void {
-  for (const [serverName, client] of clients.entries()) {
-    const clientCallbacks: ListChangedCallbacks = {};
-
-    if (callbacks.onToolsChanged) {
-      clientCallbacks.onToolsChanged = (tools) => callbacks.onToolsChanged!(serverName, tools);
-    }
-    if (callbacks.onPromptsChanged) {
-      clientCallbacks.onPromptsChanged = (prompts) => callbacks.onPromptsChanged!(serverName, prompts);
-    }
-    if (callbacks.onResourcesChanged) {
-      clientCallbacks.onResourcesChanged = (resources) => callbacks.onResourcesChanged!(serverName, resources);
-    }
-
-    setupListChanged(client, clientCallbacks);
-  }
+  setupForAllClients(clients, (serverName, client) => {
+    setupListChanged(client, {
+      onToolsChanged: callbacks.onToolsChanged
+        ? (tools) => callbacks.onToolsChanged!(serverName, tools)
+        : undefined,
+      onPromptsChanged: callbacks.onPromptsChanged
+        ? (prompts) => callbacks.onPromptsChanged!(serverName, prompts)
+        : undefined,
+      onResourcesChanged: callbacks.onResourcesChanged
+        ? (resources) => callbacks.onResourcesChanged!(serverName, resources)
+        : undefined,
+    });
+  });
 }
 
 /**
@@ -618,11 +625,9 @@ export function setupSubscriptionsForAll(
   clients: Map<string, Client>,
   onResourceUpdated: MultiServerSubscriptionCallback
 ): void {
-  for (const [serverName, client] of clients.entries()) {
-    setupSubscriptions(client, (uri) => {
-      onResourceUpdated(serverName, uri);
-    });
-  }
+  setupForAllClients(clients, (serverName, client) => {
+    setupSubscriptions(client, (uri) => onResourceUpdated(serverName, uri));
+  });
 }
 
 // ============================================================================
