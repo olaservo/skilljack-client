@@ -19,7 +19,7 @@
  *     // Call a tool with task support (streaming progress)
  *     const result = await callToolWithTaskSupport(client, 'my-tool', { arg: 'value' }, {
  *       onTaskCreated: (task) => console.log('Task started:', task.taskId),
- *       onTaskStatus: (task) => console.log('Status:', task.status, task.statusMessage),
+ *       onTaskStatusUpdate: (task) => console.log('Status:', task.status, task.statusMessage),
  *     });
  *
  *     // Or manage tasks directly
@@ -60,7 +60,7 @@ export interface TaskCallbacks {
    * Called when task status changes.
    * Use this to show progress updates to the user.
    */
-  onTaskStatus?: (task: Task) => void;
+  onTaskStatusUpdate?: (task: Task) => void;
 
   /**
    * Called for log/status messages.
@@ -136,7 +136,7 @@ export async function callToolWithTaskSupport(
   args: Record<string, unknown>,
   callbacks: TaskCallbacks = {}
 ): Promise<CallToolResult> {
-  const { onTaskCreated, onTaskStatus, onLog } = callbacks;
+  const { onTaskCreated, onTaskStatusUpdate, onLog } = callbacks;
   const log = onLog ?? (() => {});
 
   log(`[Tasks] Calling tool "${toolName}" with task support...`);
@@ -157,7 +157,7 @@ export async function callToolWithTaskSupport(
 
       case 'taskStatus':
         log(`[Tasks] Status: ${message.task.status}${message.task.statusMessage ? ` - ${message.task.statusMessage}` : ''}`);
-        onTaskStatus?.(message.task);
+        onTaskStatusUpdate?.(message.task);
         break;
 
       case 'result':

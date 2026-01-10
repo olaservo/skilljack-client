@@ -112,7 +112,7 @@ export async function runRepl(
             onTaskCreated: (task) => {
               log(`[Task] Created: ${task.taskId}`);
             },
-            onTaskStatus: (task) => {
+            onTaskStatusUpdate: (task) => {
               log(`[Task] Status: ${task.status}${task.statusMessage ? ` - ${task.statusMessage}` : ''}`);
             },
           });
