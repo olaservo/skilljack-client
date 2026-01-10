@@ -29,3 +29,12 @@ export {
   type CompletionRef,
   type CompletionContext,
 } from './completions.js';
+export {
+  toolHasUI,
+  getToolUiResourceUri,
+  fetchUIResource,
+  getToolsWithUIInfo,
+  RESOURCE_MIME_TYPE,
+  type UIResource,
+  type ToolWithUIInfo,
+} from './apps.js';

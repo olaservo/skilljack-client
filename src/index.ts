@@ -54,6 +54,9 @@ import { log, logError, setStdioMode } from './logging.js';
 // Import conformance runner
 import { runConformanceScenario } from './conformance/runner.js';
 
+// Import multi-server support
+import { loadMultiServerConfig, connectToAllServers, disconnectAll } from './multi-server.js';
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -104,6 +107,8 @@ async function main() {
   let cliInstructions: string | undefined;
   let noServerInstructions = false;
   let configPath: string | undefined;
+  let webPort: number | undefined;
+  let serversConfigPath: string | undefined;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--stdio' && args[i + 1]) {
@@ -146,6 +151,21 @@ async function main() {
         process.exit(1);
       }
       i++;
+    } else if (args[i] === '--web') {
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith('--')) {
+        webPort = parseInt(nextArg, 10);
+        if (isNaN(webPort)) {
+          webPort = 8080;
+        } else {
+          i++;
+        }
+      } else {
+        webPort = 8080;
+      }
+    } else if (args[i] === '--servers' && args[i + 1]) {
+      serversConfigPath = args[i + 1];
+      i++;
     } else if (args[i] === '--help') {
       log(`
 Usage: mcp-skilljack-client [options]
@@ -177,6 +197,12 @@ Server Instructions:
   SECURITY NOTE: Instructions are probabilistic guidance - do not rely on
   them for security-critical operations. Use deterministic checks instead.
 
+Web UI (MCP Apps):
+  --web [port]             Start web server mode (default: 8080)
+                           Opens browser UI for calling tools and viewing MCP Apps
+  --servers <config.json>  Connect to multiple servers (use with --web)
+                           Config format: { "mcpServers": { "name": { "transport": "http", "url": "..." } } }
+
 Conformance testing:
   --conformance <scenario> <url>   Run conformance test scenario
                                    Scenarios: initialize, tools-call, elicitation-defaults
@@ -185,19 +211,63 @@ Conformance testing:
     }
   }
 
-  if (!transport) {
-    logError('Error: Specify --stdio or --url');
-    process.exit(1);
-  }
-
-  // Load client config file
-  const config = loadConfig(configPath);
-
   // Build capabilities based on flags
   const capabilities: Record<string, unknown> = {};
   if (enableSampling) capabilities.sampling = { tools: {} };
   if (roots.length) capabilities.roots = { listChanged: true };
   capabilities.elicitation = { form: {} };
+
+  // Multi-server web mode: skip single transport requirement
+  if (webPort !== undefined && serversConfigPath) {
+    const { startMultiServerWebServer } = await import('./web/server.js');
+    const { startSandboxServer } = await import('./web/sandbox-server.js');
+
+    log('Loading multi-server configuration...');
+    const multiConfig = await loadMultiServerConfig(serversConfigPath);
+
+    log(`Connecting to ${Object.keys(multiConfig.mcpServers).length} server(s)...`);
+    const clients = await connectToAllServers(multiConfig, {
+      capabilities,
+      continueOnError: true,
+      onConnect: (name) => log(`  Connected: ${name}`),
+      onError: (name, err) => logError(`  Failed: ${name} - ${err.message}`),
+    });
+
+    if (clients.size === 0) {
+      logError('No servers connected');
+      process.exit(1);
+    }
+
+    const sandboxPort = webPort + 1;
+    await startSandboxServer({
+      port: sandboxPort,
+      allowedHost: `localhost:${webPort}`,
+      onLog: log,
+    });
+
+    await startMultiServerWebServer({
+      port: webPort,
+      sandboxPort,
+      clients,
+      onLog: log,
+    });
+
+    log(`\nWeb UI available at http://localhost:${webPort}`);
+    log('Press Ctrl+C to exit.\n');
+
+    // Keep process alive
+    await new Promise(() => {});
+    return;
+  }
+
+  // Single server mode requires transport
+  if (!transport) {
+    logError('Error: Specify --stdio or --url (or use --servers with --web for multi-server mode)');
+    process.exit(1);
+  }
+
+  // Load client config file
+  const config = loadConfig(configPath);
 
   // Create client
   const client = new Client(
@@ -366,6 +436,34 @@ Conformance testing:
   if (serverSupportsLogging(client)) {
     await setLoggingLevel(client, logLevel);
     log(`Logging: level set to "${logLevel}"`);
+  }
+
+  // Web mode (single server): start web server and exit REPL
+  // Note: Multi-server web mode is handled earlier, before transport check
+  if (webPort !== undefined) {
+    const { startWebServer } = await import('./web/server.js');
+    const { startSandboxServer } = await import('./web/sandbox-server.js');
+
+    const sandboxPort = webPort + 1;
+    await startSandboxServer({
+      port: sandboxPort,
+      allowedHost: `localhost:${webPort}`,
+      onLog: log,
+    });
+
+    await startWebServer({
+      port: webPort,
+      sandboxPort,
+      client,
+      onLog: log,
+    });
+
+    log(`\nWeb UI available at http://localhost:${webPort}`);
+    log('Press Ctrl+C to exit.\n');
+
+    // Keep process alive - the servers are running
+    await new Promise(() => {});
+    return;
   }
 
   log('\nCommands:');

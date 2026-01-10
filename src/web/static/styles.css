@@ -1,0 +1,301 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #1a1a2e;
+  --bg-secondary: #16213e;
+  --text: #eee;
+  --text-muted: #888;
+  --accent: #0f3460;
+  --accent-hover: #1a4a7a;
+  --success: #00d26a;
+  --error: #ff6b6b;
+  --border: #333;
+  --ui-badge: #e94560;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+header {
+  background: var(--bg-secondary);
+  padding: 1rem 2rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+#connection-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+#connection-status.connected {
+  background: var(--success);
+  color: #000;
+}
+
+#connection-status.disconnected {
+  background: var(--error);
+  color: #fff;
+}
+
+main {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 1rem;
+  padding: 1rem;
+  height: calc(100vh - 60px);
+}
+
+.panel {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.panel h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Tools List */
+#tools-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+#tools-list li {
+  padding: 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+  background: var(--accent);
+  transition: background 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#tools-list li:hover {
+  background: var(--accent-hover);
+}
+
+#tools-list li.selected {
+  background: var(--accent-hover);
+  border: 1px solid var(--ui-badge);
+}
+
+.tool-name {
+  font-weight: 500;
+}
+
+.tool-badges {
+  display: flex;
+  gap: 0.25rem;
+}
+
+/* Server header in multi-server mode */
+.server-header {
+  background: transparent !important;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.5rem 0.75rem !important;
+  margin-top: 0.5rem;
+  cursor: default !important;
+  border-bottom: 1px solid var(--border);
+}
+
+.server-header:first-child {
+  margin-top: 0;
+}
+
+.server-header:hover {
+  background: transparent !important;
+}
+
+.ui-badge {
+  background: var(--ui-badge);
+  color: #fff;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* Main Content */
+.main-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Tool Call Form */
+#tool-call-section {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+#tool-call-section h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+}
+
+#tool-description {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+#tool-args {
+  width: 100%;
+  min-height: 100px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 0.75rem;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.875rem;
+  resize: vertical;
+}
+
+#call-button {
+  margin-top: 0.75rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--ui-badge);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+
+#call-button:hover {
+  opacity: 0.9;
+}
+
+#call-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Results */
+#result-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#result-section h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+#result-container {
+  flex: 1;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#result-json {
+  flex: 1;
+  padding: 1rem;
+  overflow: auto;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 0.875rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* App Container */
+#app-container {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+}
+
+#app-container.visible {
+  display: flex;
+}
+
+#app-container h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+#app-iframe-wrapper {
+  flex: 1;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  min-height: 300px;
+}
+
+#app-iframe-wrapper iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* Server Info */
+#server-info {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  padding: 0.5rem;
+  background: var(--accent);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+#server-info strong {
+  color: var(--text);
+}
+
+/* Loading State */
+.loading {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Error State */
+.error {
+  color: var(--error);
+  padding: 1rem;
+  background: rgba(255, 107, 107, 0.1);
+  border-radius: 4px;
+}

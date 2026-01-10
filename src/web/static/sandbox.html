@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<!--
+  Sandbox Proxy for MCP Apps double-iframe security model.
+
+  This file MUST be served from a DIFFERENT ORIGIN than the host application.
+  For example:
+    - Host: http://localhost:8080
+    - Sandbox: http://localhost:8081/sandbox.html
+
+  How it works:
+  1. Host embeds this page in an iframe with sandbox="allow-scripts allow-same-origin allow-forms"
+  2. This proxy creates an inner iframe for the actual MCP App
+  3. Messages are relayed: Host <-> Sandbox Proxy <-> App
+  4. Security: The inner iframe cannot access host cookies/DOM
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark" />
+    <title>MCP App Sandbox Proxy</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100vh;
+        width: 100vw;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      iframe {
+        background-color: transparent;
+        border: 0px none transparent;
+        padding: 0px;
+        overflow: hidden;
+        flex-grow: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      // Pattern to validate which hosts can embed this sandbox
+      const ALLOWED_REFERRER_PATTERN = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/;
+
+      // Must be in an iframe
+      if (window.self === window.top) {
+        throw new Error("This file must be loaded in an iframe.");
+      }
+
+      // Must have a referrer
+      if (!document.referrer) {
+        throw new Error("No referrer - cannot validate embedding site.");
+      }
+
+      // Validate referrer matches allowed pattern
+      if (!document.referrer.match(ALLOWED_REFERRER_PATTERN)) {
+        throw new Error(
+          `Embedding domain not allowed: ${document.referrer}. ` +
+          `Update ALLOWED_REFERRER_PATTERN to allow your domain.`
+        );
+      }
+
+      // Extract expected host origin for message validation
+      const EXPECTED_HOST_ORIGIN = new URL(document.referrer).origin;
+      const OWN_ORIGIN = new URL(window.location.href).origin;
+
+      // Security self-test: verify we can't access parent window
+      try {
+        window.top.alert("SECURITY FAILURE: Sandbox not configured correctly!");
+        throw "SECURITY_FAILURE";
+      } catch (e) {
+        if (e === "SECURITY_FAILURE") {
+          document.body.innerHTML = "<h1>SECURITY ERROR</h1><p>Sandbox is not configured securely.</p>";
+          throw new Error("Sandbox security check failed!");
+        }
+        // Expected: SecurityError confirms proper sandboxing
+      }
+
+      // Create inner iframe for app
+      const inner = document.createElement("iframe");
+      inner.style.cssText = "width: 100%; height: 100%; border: none;";
+      inner.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
+      document.body.appendChild(inner);
+
+      // Message types
+      const RESOURCE_READY = "ui/notifications/sandbox-resource-ready";
+      const PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+
+      // Build CSP meta tag
+      function buildCspMetaTag(csp) {
+        const resourceDomains = (csp?.resourceDomains || []).join(" ");
+        const connectDomains = (csp?.connectDomains || []).join(" ");
+
+        const directives = [
+          "default-src 'self'",
+          `script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: ${resourceDomains}`.trim(),
+          `style-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
+          `img-src 'self' data: blob: ${resourceDomains}`.trim(),
+          `font-src 'self' data: blob: ${resourceDomains}`.trim(),
+          `connect-src 'self' ${connectDomains}`.trim(),
+          "frame-src 'none'",
+          "object-src 'none'",
+          "base-uri 'self'",
+        ];
+
+        return `<meta http-equiv="Content-Security-Policy" content="${directives.join("; ")}">`;
+      }
+
+      // Message relay
+      window.addEventListener("message", (event) => {
+        // Messages from HOST (parent window)
+        if (event.source === window.parent) {
+          if (event.origin !== EXPECTED_HOST_ORIGIN) {
+            console.error("[Sandbox] Rejecting message from unexpected origin:", event.origin);
+            return;
+          }
+
+          // Handle resource ready notification (load app HTML)
+          if (event.data?.method === RESOURCE_READY) {
+            const { html, sandbox, csp } = event.data.params;
+
+            if (typeof sandbox === "string") {
+              inner.setAttribute("sandbox", sandbox);
+            }
+
+            if (typeof html === "string") {
+              let modifiedHtml = html;
+
+              // Inject CSP meta tag if provided
+              if (csp) {
+                const cspMetaTag = buildCspMetaTag(csp);
+                console.log("[Sandbox] Injecting CSP:", cspMetaTag);
+
+                if (modifiedHtml.includes("<head>")) {
+                  modifiedHtml = modifiedHtml.replace("<head>", `<head>\n${cspMetaTag}`);
+                } else if (modifiedHtml.includes("<head ")) {
+                  modifiedHtml = modifiedHtml.replace(/<head[^>]*>/, `$&\n${cspMetaTag}`);
+                } else {
+                  modifiedHtml = cspMetaTag + modifiedHtml;
+                }
+              }
+
+              inner.srcdoc = modifiedHtml;
+            }
+          } else {
+            // Relay other messages to inner iframe
+            if (inner.contentWindow) {
+              inner.contentWindow.postMessage(event.data, "*");
+            }
+          }
+        }
+        // Messages from APP (inner iframe)
+        else if (event.source === inner.contentWindow) {
+          if (event.origin !== OWN_ORIGIN) {
+            console.error("[Sandbox] Rejecting message from inner iframe with unexpected origin:", event.origin);
+            return;
+          }
+
+          // Relay to host
+          window.parent.postMessage(event.data, EXPECTED_HOST_ORIGIN);
+        }
+      });
+
+      // Signal ready to host
+      window.parent.postMessage(
+        { jsonrpc: "2.0", method: PROXY_READY, params: {} },
+        EXPECTED_HOST_ORIGIN
+      );
+
+      console.log("[Sandbox] Proxy ready, waiting for app HTML...");
+    </script>
+  </body>
+</html>

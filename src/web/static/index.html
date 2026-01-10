@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCP Skilljack Client - Web UI</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header>
+    <h1>MCP Skilljack Client</h1>
+    <div id="connection-status" class="disconnected">Connecting...</div>
+  </header>
+
+  <main>
+    <aside class="panel">
+      <div id="server-info" class="loading">Loading server info...</div>
+      <h2>Tools</h2>
+      <ul id="tools-list">
+        <li class="loading">Loading tools...</li>
+      </ul>
+    </aside>
+
+    <div class="main-content">
+      <section id="tool-call-section" class="panel">
+        <h3 id="selected-tool-name">Select a tool</h3>
+        <p id="tool-description">Click a tool from the list to get started.</p>
+        <textarea id="tool-args" placeholder='{"key": "value"}'>{}</textarea>
+        <button id="call-button" disabled>Call Tool</button>
+      </section>
+
+      <section id="result-section">
+        <h3>Result</h3>
+        <div id="result-container">
+          <pre id="result-json"></pre>
+        </div>
+      </section>
+
+      <section id="app-container">
+        <h3>
+          <span class="ui-badge">UI</span>
+          MCP App
+        </h3>
+        <div id="app-iframe-wrapper">
+          <!-- Sandbox iframe will be inserted here -->
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
