@@ -56,7 +56,6 @@ import {
   formatTaskForDisplay,
   formatTaskStatusLine,
 } from './capabilities/tasks.js';
-import { setupClientTasks } from './capabilities/client-tasks.js';
 import { setupListChanged } from './capabilities/list-changed.js';
 import { setupSubscriptions, serverSupportsSubscriptions } from './capabilities/subscriptions.js';
 
@@ -239,12 +238,6 @@ Conformance testing:
     { name: 'mcp-skilljack-client', version: '0.1.0' },
     { capabilities, taskStore: clientTaskStore }
   );
-
-  // Set up client-side task request handlers (tasks/get, tasks/result, etc.)
-  // This allows the server to poll for task status and retrieve results
-  setupClientTasks(client, {
-    onLog: (msg: string) => log(msg),
-  });
 
   // Set up capabilities that don't need server instructions
   // The SDK provides extra.taskStore to handlers automatically via the taskStore option above

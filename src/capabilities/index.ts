@@ -43,7 +43,3 @@ export {
   type TaskCallbacks,
   type TaskSupportLevel,
 } from './tasks.js';
-export {
-  setupClientTasks,
-  type ClientTasksConfig,
-} from './client-tasks.js';
