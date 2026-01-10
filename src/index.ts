@@ -11,9 +11,13 @@
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTaskStore } from '@modelcontextprotocol/sdk/experimental/tasks/stores/in-memory.js';
 import { createInterface } from 'node:readline';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import 'dotenv/config';
+
+// Import persistent task store
+import { createPersistentTaskStore } from './stores/index.js';
 
 // Import standalone capabilities
 import {
@@ -223,7 +227,12 @@ Conformance testing:
 
   // Create task store for client-side task support
   // This enables the SDK to provide extra.taskStore to request handlers
-  const clientTaskStore = new InMemoryTaskStore();
+  // Uses persistent storage in ~/.skilljack/data for resumability
+  const clientTaskStore = createPersistentTaskStore({
+    dataDir: join(homedir(), '.skilljack', 'data'),
+    persistenceEnabled: true,
+    onLog: (msg) => log(msg),
+  });
 
   // Create client with task store
   const client = new Client(
