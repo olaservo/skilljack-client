@@ -252,7 +252,28 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
 
     // Handle JSON-RPC messages from app
     if (data.jsonrpc === '2.0') {
-      // App initialized
+      // App sends ui/initialize request - HOST MUST RESPOND
+      if (data.method === 'ui/initialize' && data.id) {
+        console.log('[Host] Received ui/initialize from app:', data.params);
+        // Respond with host capabilities
+        sendToApp(iframe, {
+          jsonrpc: '2.0',
+          id: data.id,
+          result: {
+            protocolVersion: '2025-01-01',
+            hostCapabilities: {
+              tools: {},
+              resources: {},
+            },
+            hostInfo: {
+              name: 'skilljack-web',
+              version: '0.1.0',
+            },
+          },
+        });
+      }
+
+      // App initialized notification - now we can send tool data
       if (data.method === 'ui/notifications/initialized') {
         console.log('[Host] App initialized');
         appInitialized = true;
@@ -272,20 +293,20 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
         });
       }
 
-      // App requests to call a tool
-      if (data.method === 'mcp/callTool' && data.id) {
+      // App requests to call a tool (MCP standard method)
+      if (data.method === 'tools/call' && data.id) {
         try {
           const result = await fetch(`/api/tools/${encodeURIComponent(data.params.name)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data.params.arguments || {}),
           });
-          const toolResult = await result.json();
+          const callResult = await result.json();
 
           sendToApp(iframe, {
             jsonrpc: '2.0',
             id: data.id,
-            result: toolResult,
+            result: callResult,
           });
         } catch (error) {
           sendToApp(iframe, {
@@ -320,35 +341,29 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
       if (data.method === 'ui/notifications/loggingMessage') {
         console.log(`[App ${data.params.level}]`, data.params.data);
       }
+
+      // App requests size change
+      if (data.method === 'ui/sizeChanged' && data.id) {
+        console.log('[Host] Size change requested:', data.params);
+        sendToApp(iframe, {
+          jsonrpc: '2.0',
+          id: data.id,
+          result: {},
+        });
+      }
     }
   };
 
   window.addEventListener('message', messageHandler);
 
-  // Send HTML to sandbox
+  // Send HTML to sandbox - app will load, call connect(), and send ui/initialize
+  console.log('[Host] Sending sandbox-resource-ready with HTML...');
   sendToApp(iframe, {
     jsonrpc: '2.0',
     method: 'ui/notifications/sandbox-resource-ready',
     params: {
       html: uiResource.html,
       csp: uiResource.csp,
-    },
-  });
-
-  // Initialize the app
-  sendToApp(iframe, {
-    jsonrpc: '2.0',
-    method: 'ui/initialize',
-    params: {
-      protocolVersion: '2025-01-01',
-      capabilities: {
-        tools: {},
-        resources: {},
-      },
-      hostInfo: {
-        name: 'skilljack-web',
-        version: '0.1.0',
-      },
     },
   });
 
