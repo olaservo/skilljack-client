@@ -38,3 +38,17 @@ export {
   type UIResource,
   type ToolWithUIInfo,
 } from './apps.js';
+export {
+  serverSupportsTasks,
+  getToolTaskSupport,
+  shouldUseTaskMode,
+  callToolWithTaskSupport,
+  callToolAuto,
+  listTasks,
+  getTask,
+  cancelTask,
+  formatTaskForDisplay,
+  formatTaskStatusLine,
+  type TaskCallbacks,
+  type TaskSupportLevel,
+} from './tasks.js';
