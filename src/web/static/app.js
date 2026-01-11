@@ -108,12 +108,12 @@ function renderToolsList() {
 
 function createToolListItem(tool) {
   const li = document.createElement('li');
-  li.dataset.tool = tool.name;
+  li.dataset.tool = tool.name;  // Qualified name for identification
   li.dataset.server = tool.serverName || 'default';
 
   const nameSpan = document.createElement('span');
   nameSpan.className = 'tool-name';
-  nameSpan.textContent = tool.name;
+  nameSpan.textContent = tool.displayName || tool.name;  // Display original name
   li.appendChild(nameSpan);
 
   const badges = document.createElement('span');
@@ -141,7 +141,7 @@ function selectTool(tool) {
   });
 
   const serverLabel = config?.multiServer ? ` (${tool.serverName})` : '';
-  selectedToolName.textContent = tool.name + serverLabel;
+  selectedToolName.textContent = (tool.displayName || tool.name) + serverLabel;
   toolDescription.textContent = tool.description || 'No description available.';
   callButton.disabled = false;
 

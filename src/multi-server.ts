@@ -1,25 +1,27 @@
 /**
  * Multi-Server Module - Connect to multiple MCP servers simultaneously
  *
- * This module is standalone. Copy this file to add multi-server support to any MCP client.
+ * Uses qualified names (server__tool) to disambiguate between servers.
+ * This ensures deterministic routing when servers may have overlapping tool names.
  *
  * Usage:
  *   import {
  *     loadMultiServerConfig,
  *     connectToAllServers,
  *     aggregateTools,
- *     findServerForTool,
- *     callToolAcrossServers,
+ *     callTool,
+ *     disconnectAll,
  *   } from './multi-server.js';
  *
  *   const config = await loadMultiServerConfig('./servers.json');
  *   const clients = await connectToAllServers(config);
  *
- *   // Get all tools from all servers
+ *   // Get all tools with qualified names (server__tool)
  *   const tools = await aggregateTools(clients);
+ *   // -> [{ name: "time__get-time", originalName: "get-time", serverName: "time", ... }]
  *
- *   // Call a tool (finds the right server automatically)
- *   const result = await callToolAcrossServers(clients, 'tool-name', { arg: 'value' });
+ *   // Call a tool using qualified name
+ *   const result = await callTool(clients, 'time__get-time', {});
  *
  *   // Clean up
  *   await disconnectAll(clients);
@@ -27,16 +29,14 @@
  * Config file format (servers.json):
  *   {
  *     "mcpServers": {
- *       "server-name": {
+ *       "time": {
  *         "transport": "stdio",
  *         "command": "node",
- *         "args": ["server.js"],
- *         "env": { "KEY": "value" }
+ *         "args": ["time-server.js"]
  *       },
- *       "remote-server": {
+ *       "weather": {
  *         "transport": "http",
- *         "url": "http://localhost:3000/mcp",
- *         "headers": { "Authorization": "Bearer token" }
+ *         "url": "http://localhost:3000/mcp"
  *       }
  *     }
  *   }
@@ -48,6 +48,13 @@ import type { Tool, Prompt, Resource } from '@modelcontextprotocol/sdk/types.js'
 import { createStdioTransport } from './transports/stdio.js';
 import { createHttpTransport } from './transports/http.js';
 import { log, logError, logWarn } from './logging.js';
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+/** Separator between server name and tool/resource name */
+export const SEPARATOR = '__';
 
 // ============================================================================
 // TYPES
@@ -73,18 +80,27 @@ export interface MultiServerConfig {
   mcpServers: Record<string, ServerConnectionConfig>;
 }
 
-/** Tool with server origin attached */
-export interface AggregatedTool extends Tool {
+/** Tool with qualified (prefixed) name: "server__tool" */
+export interface AggregatedTool extends Omit<Tool, 'name'> {
+  /** Qualified name: "server__tool" */
+  name: string;
+  /** Original tool name without prefix */
+  originalName: string;
+  /** Server this tool belongs to */
   serverName: string;
 }
 
-/** Prompt with server origin attached */
-export interface AggregatedPrompt extends Prompt {
+/** Prompt with qualified (prefixed) name */
+export interface AggregatedPrompt extends Omit<Prompt, 'name'> {
+  name: string;
+  originalName: string;
   serverName: string;
 }
 
-/** Resource with server origin attached */
-export interface AggregatedResource extends Resource {
+/** Resource with qualified (prefixed) URI */
+export interface AggregatedResource extends Omit<Resource, 'uri'> {
+  uri: string;
+  originalUri: string;
   serverName: string;
 }
 
@@ -105,6 +121,43 @@ export interface ConnectOptions {
   onConnect?: (name: string, client: Client) => void;
   /** Callback when a server fails to connect */
   onError?: (name: string, error: Error) => void;
+}
+
+// ============================================================================
+// NAME UTILITIES
+// ============================================================================
+
+/**
+ * Create a qualified name by prefixing with server name.
+ *
+ * @example
+ * qualifyName("weather", "get-forecast") // -> "weather__get-forecast"
+ */
+export function qualifyName(serverName: string, name: string): string {
+  return `${serverName}${SEPARATOR}${name}`;
+}
+
+/**
+ * Parse a qualified name into server and original name.
+ *
+ * @example
+ * parseQualifiedName("weather__get-forecast")
+ * // -> { serverName: "weather", name: "get-forecast" }
+ *
+ * @throws Error if name doesn't contain separator
+ */
+export function parseQualifiedName(qualifiedName: string): { serverName: string; name: string } {
+  const separatorIndex = qualifiedName.indexOf(SEPARATOR);
+  if (separatorIndex === -1) {
+    throw new Error(
+      `Invalid qualified name "${qualifiedName}": missing "${SEPARATOR}" separator. ` +
+      `Expected format: "server${SEPARATOR}name"`
+    );
+  }
+  return {
+    serverName: qualifiedName.substring(0, separatorIndex),
+    name: qualifiedName.substring(separatorIndex + SEPARATOR.length),
+  };
 }
 
 // ============================================================================
@@ -263,12 +316,19 @@ export async function disconnectAll(clients: Map<string, Client>): Promise<void>
 // ============================================================================
 
 /**
- * Get all tools from all connected servers.
+ * Get all tools from all connected servers with qualified names.
  *
- * Each tool includes a `serverName` property indicating its origin.
+ * Tool names are prefixed with server name: "server__tool-name"
  *
  * @param clients - Map of connected clients
- * @returns Array of tools with server names attached
+ * @returns Array of tools with qualified names
+ *
+ * @example
+ * const tools = await aggregateTools(clients);
+ * // [
+ * //   { name: "time__get-time", originalName: "get-time", serverName: "time", ... },
+ * //   { name: "weather__get-forecast", originalName: "get-forecast", serverName: "weather", ... }
+ * // ]
  */
 export async function aggregateTools(clients: Map<string, Client>): Promise<AggregatedTool[]> {
   const allTools: AggregatedTool[] = [];
@@ -276,7 +336,12 @@ export async function aggregateTools(clients: Map<string, Client>): Promise<Aggr
   const results = await Promise.allSettled(
     Array.from(clients.entries()).map(async ([serverName, client]) => {
       const response = await client.listTools();
-      return response.tools.map((tool) => ({ ...tool, serverName }));
+      return response.tools.map((tool) => ({
+        ...tool,
+        name: qualifyName(serverName, tool.name),
+        originalName: tool.name,
+        serverName,
+      }));
     })
   );
 
@@ -290,10 +355,10 @@ export async function aggregateTools(clients: Map<string, Client>): Promise<Aggr
 }
 
 /**
- * Get all prompts from all connected servers.
+ * Get all prompts from all connected servers with qualified names.
  *
  * @param clients - Map of connected clients
- * @returns Array of prompts with server names attached
+ * @returns Array of prompts with qualified names
  */
 export async function aggregatePrompts(clients: Map<string, Client>): Promise<AggregatedPrompt[]> {
   const allPrompts: AggregatedPrompt[] = [];
@@ -301,7 +366,12 @@ export async function aggregatePrompts(clients: Map<string, Client>): Promise<Ag
   const results = await Promise.allSettled(
     Array.from(clients.entries()).map(async ([serverName, client]) => {
       const response = await client.listPrompts();
-      return response.prompts.map((prompt) => ({ ...prompt, serverName }));
+      return response.prompts.map((prompt) => ({
+        ...prompt,
+        name: qualifyName(serverName, prompt.name),
+        originalName: prompt.name,
+        serverName,
+      }));
     })
   );
 
@@ -315,10 +385,10 @@ export async function aggregatePrompts(clients: Map<string, Client>): Promise<Ag
 }
 
 /**
- * Get all resources from all connected servers.
+ * Get all resources from all connected servers with qualified URIs.
  *
  * @param clients - Map of connected clients
- * @returns Array of resources with server names attached
+ * @returns Array of resources with qualified URIs
  */
 export async function aggregateResources(
   clients: Map<string, Client>
@@ -328,7 +398,12 @@ export async function aggregateResources(
   const results = await Promise.allSettled(
     Array.from(clients.entries()).map(async ([serverName, client]) => {
       const response = await client.listResources();
-      return response.resources.map((resource) => ({ ...resource, serverName }));
+      return response.resources.map((resource) => ({
+        ...resource,
+        uri: qualifyName(serverName, resource.uri),
+        originalUri: resource.uri,
+        serverName,
+      }));
     })
   );
 
@@ -342,61 +417,42 @@ export async function aggregateResources(
 }
 
 // ============================================================================
-// TOOL ROUTING
+// TOOL CALLING
 // ============================================================================
 
 /**
- * Find which server has a specific tool.
+ * Call a tool using its qualified name (server__tool).
  *
  * @param clients - Map of connected clients
- * @param toolName - Name of the tool to find
- * @returns Server name and client, or null if not found
+ * @param qualifiedToolName - Qualified tool name (e.g., "weather__get-forecast")
+ * @param args - Tool arguments
+ * @returns Tool result with server name
+ *
+ * @example
+ * const { serverName, result } = await callTool(clients, "weather__get-forecast", { city: "Seattle" });
  */
-export async function findServerForTool(
+export async function callTool(
   clients: Map<string, Client>,
-  toolName: string
-): Promise<{ serverName: string; client: Client } | null> {
-  // Check servers in parallel
-  const results = await Promise.allSettled(
-    Array.from(clients.entries()).map(async ([serverName, client]) => {
-      const response = await client.listTools();
-      const hasTool = response.tools.some((t) => t.name === toolName);
-      return hasTool ? { serverName, client } : null;
-    })
-  );
+  qualifiedToolName: string,
+  args: Record<string, unknown> = {}
+): Promise<{ serverName: string; result: Awaited<ReturnType<Client['callTool']>> }> {
+  const { serverName, name: toolName } = parseQualifiedName(qualifiedToolName);
 
-  for (const result of results) {
-    if (result.status === 'fulfilled' && result.value) {
-      return result.value;
-    }
+  const client = clients.get(serverName);
+  if (!client) {
+    throw new Error(
+      `Server "${serverName}" not found. Available servers: ${Array.from(clients.keys()).join(', ')}`
+    );
   }
 
-  return null;
+  const result = await client.callTool({ name: toolName, arguments: args });
+  return { serverName, result };
 }
 
 /**
- * Call a tool, automatically routing to the correct server.
- *
- * @param clients - Map of connected clients
- * @param toolName - Name of the tool to call
- * @param args - Tool arguments
- * @returns Tool result
- * @throws Error if tool not found on any server
+ * @deprecated Use callTool() instead. This alias exists for migration.
  */
-export async function callToolAcrossServers(
-  clients: Map<string, Client>,
-  toolName: string,
-  args: Record<string, unknown> = {}
-): Promise<{ serverName: string; result: Awaited<ReturnType<Client['callTool']>> }> {
-  const server = await findServerForTool(clients, toolName);
-
-  if (!server) {
-    throw new Error(`Tool "${toolName}" not found on any connected server`);
-  }
-
-  const result = await server.client.callTool({ name: toolName, arguments: args });
-  return { serverName: server.serverName, result };
-}
+export const callToolAcrossServers = callTool;
 
 // ============================================================================
 // UTILITY

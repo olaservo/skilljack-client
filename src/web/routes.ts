@@ -43,7 +43,10 @@ async function readBody(req: IncomingMessage): Promise<string> {
 
 /** Tool info with UI detection for display */
 interface ToolWithUIInfo {
+  /** Qualified name for API calls (server__tool) */
   name: string;
+  /** Original tool name for display */
+  displayName: string;
   description?: string;
   hasUi: boolean;
   uiResourceUri?: string;
@@ -56,6 +59,7 @@ function toolsToUIInfo(tools: AggregatedTool[]): ToolWithUIInfo[] {
     const uiResourceUri = getToolUiResourceUri(tool);
     return {
       name: tool.name,
+      displayName: tool.originalName,
       description: tool.description,
       hasUi: !!uiResourceUri,
       uiResourceUri,
