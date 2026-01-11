@@ -9,6 +9,11 @@
       "transport": "stdio",
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-memory@latest"]
+    },
+    "skilljack": {
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@skilljack/mcp@latest", "/path/to/skills"]
     }
   }
 }
