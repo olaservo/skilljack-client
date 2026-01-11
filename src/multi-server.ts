@@ -455,6 +455,66 @@ export async function callTool(
 export const callToolAcrossServers = callTool;
 
 // ============================================================================
+// PROMPT / RESOURCE ACCESS
+// ============================================================================
+
+/**
+ * Get a prompt using its qualified name (server__prompt).
+ *
+ * @param clients - Map of connected clients
+ * @param qualifiedPromptName - Qualified prompt name (e.g., "templates__greeting")
+ * @param args - Prompt arguments
+ * @returns Prompt result with messages
+ *
+ * @example
+ * const prompt = await getPrompt(clients, "templates__greeting", { name: "World" });
+ */
+export async function getPrompt(
+  clients: Map<string, Client>,
+  qualifiedPromptName: string,
+  args: Record<string, string> = {}
+): Promise<{ serverName: string; result: Awaited<ReturnType<Client['getPrompt']>> }> {
+  const { serverName, name: promptName } = parseQualifiedName(qualifiedPromptName);
+
+  const client = clients.get(serverName);
+  if (!client) {
+    throw new Error(
+      `Server "${serverName}" not found. Available servers: ${Array.from(clients.keys()).join(', ')}`
+    );
+  }
+
+  const result = await client.getPrompt({ name: promptName, arguments: args });
+  return { serverName, result };
+}
+
+/**
+ * Read a resource using its qualified URI (server__uri).
+ *
+ * @param clients - Map of connected clients
+ * @param qualifiedUri - Qualified URI (e.g., "files__file:///data.json")
+ * @returns Resource contents with server name
+ *
+ * @example
+ * const resource = await readResource(clients, "files__file:///data.json");
+ */
+export async function readResource(
+  clients: Map<string, Client>,
+  qualifiedUri: string
+): Promise<{ serverName: string; result: Awaited<ReturnType<Client['readResource']>> }> {
+  const { serverName, name: uri } = parseQualifiedName(qualifiedUri);
+
+  const client = clients.get(serverName);
+  if (!client) {
+    throw new Error(
+      `Server "${serverName}" not found. Available servers: ${Array.from(clients.keys()).join(', ')}`
+    );
+  }
+
+  const result = await client.readResource({ uri });
+  return { serverName, result };
+}
+
+// ============================================================================
 // UTILITY
 // ============================================================================
 
