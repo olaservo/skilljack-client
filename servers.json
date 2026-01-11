@@ -3,12 +3,12 @@
     "everything": {
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-everything"]
+      "args": ["-y", "@modelcontextprotocol/server-everything@latest"]
     },
     "memory": {
       "transport": "stdio",
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"]
+      "args": ["-y", "@modelcontextprotocol/server-memory@latest"]
     }
   }
 }
