@@ -515,6 +515,156 @@ export async function readResource(
 }
 
 // ============================================================================
+// SUBSCRIPTIONS
+// ============================================================================
+
+/**
+ * Subscribe to a resource using its qualified URI (server__uri).
+ *
+ * @param clients - Map of connected clients
+ * @param qualifiedUri - Qualified URI (e.g., "files__file:///data.json")
+ *
+ * @example
+ * await subscribeResource(clients, "files__file:///data.json");
+ */
+export async function subscribeResource(
+  clients: Map<string, Client>,
+  qualifiedUri: string
+): Promise<{ serverName: string }> {
+  const { serverName, name: uri } = parseQualifiedName(qualifiedUri);
+
+  const client = clients.get(serverName);
+  if (!client) {
+    throw new Error(
+      `Server "${serverName}" not found. Available servers: ${Array.from(clients.keys()).join(', ')}`
+    );
+  }
+
+  await client.subscribeResource({ uri });
+  return { serverName };
+}
+
+/**
+ * Unsubscribe from a resource using its qualified URI (server__uri).
+ *
+ * @param clients - Map of connected clients
+ * @param qualifiedUri - Qualified URI (e.g., "files__file:///data.json")
+ *
+ * @example
+ * await unsubscribeResource(clients, "files__file:///data.json");
+ */
+export async function unsubscribeResource(
+  clients: Map<string, Client>,
+  qualifiedUri: string
+): Promise<{ serverName: string }> {
+  const { serverName, name: uri } = parseQualifiedName(qualifiedUri);
+
+  const client = clients.get(serverName);
+  if (!client) {
+    throw new Error(
+      `Server "${serverName}" not found. Available servers: ${Array.from(clients.keys()).join(', ')}`
+    );
+  }
+
+  await client.unsubscribeResource({ uri });
+  return { serverName };
+}
+
+// ============================================================================
+// COMPLETIONS
+// ============================================================================
+
+/** Completion result from a server */
+export interface CompletionResult {
+  values: string[];
+  total?: number;
+  hasMore?: boolean;
+}
+
+/** Context for completions (previously-resolved arguments) */
+export interface CompletionContext {
+  arguments?: Record<string, string>;
+}
+
+/**
+ * Get completions for a prompt argument using qualified prompt name.
+ *
+ * @param clients - Map of connected clients
+ * @param qualifiedPromptName - Qualified prompt name (e.g., "templates__greeting")
+ * @param argName - Name of the argument to complete
+ * @param value - Current value to complete from
+ * @param context - Optional context with previously-resolved arguments
+ * @returns Completion values from the server
+ *
+ * @example
+ * const result = await completePromptArgument(clients, "templates__greeting", "name", "Jo");
+ * // result.values might be ["John", "Joan", "Jose", ...]
+ */
+export async function completePromptArgument(
+  clients: Map<string, Client>,
+  qualifiedPromptName: string,
+  argName: string,
+  value: string,
+  context?: CompletionContext
+): Promise<{ serverName: string; result: CompletionResult }> {
+  const { serverName, name: promptName } = parseQualifiedName(qualifiedPromptName);
+
+  const client = clients.get(serverName);
+  if (!client) {
+    throw new Error(
+      `Server "${serverName}" not found. Available servers: ${Array.from(clients.keys()).join(', ')}`
+    );
+  }
+
+  const response = await client.complete({
+    ref: { type: 'ref/prompt', name: promptName },
+    argument: { name: argName, value },
+    context,
+  });
+
+  return { serverName, result: response.completion };
+}
+
+/**
+ * Get completions for a resource template argument using qualified URI.
+ *
+ * @param clients - Map of connected clients
+ * @param qualifiedUri - Qualified resource template URI (e.g., "files__file:///users/{id}.json")
+ * @param argName - Name of the argument to complete
+ * @param value - Current value to complete from
+ * @param context - Optional context with previously-resolved arguments
+ * @returns Completion values from the server
+ *
+ * @example
+ * const result = await completeResourceArgument(clients, "files__file:///users/{id}.json", "id", "12");
+ * // result.values might be ["123", "124", "125", ...]
+ */
+export async function completeResourceArgument(
+  clients: Map<string, Client>,
+  qualifiedUri: string,
+  argName: string,
+  value: string,
+  context?: CompletionContext
+): Promise<{ serverName: string; result: CompletionResult }> {
+  const { serverName, name: uri } = parseQualifiedName(qualifiedUri);
+
+  const client = clients.get(serverName);
+  if (!client) {
+    throw new Error(
+      `Server "${serverName}" not found. Available servers: ${Array.from(clients.keys()).join(', ')}`
+    );
+  }
+
+  const response = await client.complete({
+    ref: { type: 'ref/resource', uri },
+    argument: { name: argName, value },
+    context,
+  });
+
+  return { serverName, result: response.completion };
+}
+
+// ============================================================================
 // UTILITY
 // ============================================================================
 
