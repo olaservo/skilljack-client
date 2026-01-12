@@ -7,6 +7,7 @@
  * Supports both single-client and multi-server modes.
  */
 
+import 'dotenv/config';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
@@ -15,6 +16,7 @@ import { WebSocketServer } from 'ws';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { createRouteHandler, createMultiServerRouteHandler } from './routes.js';
 import { createWebSocketHandler, createMultiServerWebSocketHandler, type WebSocketManager } from './websocket.js';
+import { createChatHandler, createToolExecuteHandler } from './llm/index.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -99,6 +101,10 @@ export async function startMultiServerWebServer(config: MultiServerWebConfig): P
   const staticDir = getStaticDir();
   const routeHandler = createMultiServerRouteHandler(clients, sandboxPort);
 
+  // LLM chat handlers
+  const chatHandler = createChatHandler(clients);
+  const toolExecuteHandler = createToolExecuteHandler(clients);
+
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url || '/', `http://localhost:${port}`);
 
@@ -110,6 +116,17 @@ export async function startMultiServerWebServer(config: MultiServerWebConfig): P
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    // LLM Chat API routes
+    if (url.pathname === '/api/chat' && req.method === 'POST') {
+      await chatHandler(req, res);
+      return;
+    }
+
+    if (url.pathname === '/api/chat/tool' && req.method === 'POST') {
+      await toolExecuteHandler(req, res);
       return;
     }
 
