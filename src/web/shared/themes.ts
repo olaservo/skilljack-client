@@ -16,12 +16,8 @@ export interface ThemeMeta {
  * Order matters - first theme is the default.
  */
 export const THEME_LIST: ThemeMeta[] = [
-  { id: 'modern-dark', name: 'Modern Dark', author: 'Skilljack' },
-  { id: 'modern-light', name: 'Modern Light', author: 'Skilljack' },
-  { id: 'winamp-classic', name: 'Winamp Classic', author: 'Skilljack' },
-  { id: 'terminal-green', name: 'Terminal Green', author: 'Skilljack' },
-  { id: 'vaporwave', name: 'Vaporwave', author: 'Skilljack' },
   { id: 'pixel-perfect', name: 'Pixel Perfect', author: 'Skilljack' },
+  { id: 'terminal-green', name: 'Terminal Green', author: 'Skilljack' },
 ];
 
 /**

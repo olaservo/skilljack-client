@@ -20,156 +20,6 @@ import type { Theme, ThemeState, ThemeAction, ThemeVariables } from '../types';
 // Built-in Themes
 // ============================================
 
-const modernDarkTheme: Theme = {
-  id: 'modern-dark',
-  name: 'Modern Dark',
-  author: 'Skilljack',
-  version: '1.0.0',
-  variables: {
-    '--bg-primary': '#0f0f0f',
-    '--bg-secondary': '#1a1a1a',
-    '--bg-panel': '#242424',
-    '--bg-hover': '#2a2a2a',
-    '--bg-active': '#333333',
-    '--text-primary': '#e4e4e4',
-    '--text-secondary': '#a0a0a0',
-    '--text-muted': '#666666',
-    '--accent': '#6366f1',
-    '--accent-hover': '#818cf8',
-    '--accent-muted': '#4f46e5',
-    '--success': '#22c55e',
-    '--error': '#ef4444',
-    '--warning': '#f59e0b',
-    '--info': '#3b82f6',
-    '--border': '#333333',
-    '--border-hover': '#444444',
-    '--font-family': "'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-    '--font-mono': "'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-    '--font-size-base': '1rem',
-    '--radius-sm': '4px',
-    '--radius-md': '8px',
-    '--radius-lg': '12px',
-    '--radius-full': '9999px',
-    '--shadow-sm': '0 1px 2px rgba(0, 0, 0, 0.3)',
-    '--shadow-md': '0 4px 6px rgba(0, 0, 0, 0.4)',
-    '--shadow-lg': '0 10px 15px rgba(0, 0, 0, 0.5)',
-    '--shadow-drawer': '0 -4px 20px rgba(0, 0, 0, 0.5)',
-    '--bezel-light': 'transparent',
-    '--bezel-dark': 'transparent',
-    '--glow': 'none',
-    '--scanlines': 'none',
-  },
-};
-
-const modernLightTheme: Theme = {
-  id: 'modern-light',
-  name: 'Modern Light',
-  author: 'Skilljack',
-  version: '1.0.0',
-  variables: {
-    '--bg-primary': '#ffffff',
-    '--bg-secondary': '#f5f5f5',
-    '--bg-panel': '#fafafa',
-    '--bg-hover': '#f0f0f0',
-    '--bg-active': '#e5e5e5',
-    '--text-primary': '#171717',
-    '--text-secondary': '#525252',
-    '--text-muted': '#a3a3a3',
-    '--accent': '#6366f1',
-    '--accent-hover': '#4f46e5',
-    '--accent-muted': '#818cf8',
-    '--success': '#16a34a',
-    '--error': '#dc2626',
-    '--warning': '#d97706',
-    '--info': '#2563eb',
-    '--border': '#e5e5e5',
-    '--border-hover': '#d4d4d4',
-    '--font-family': "'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-    '--font-mono': "'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', Consolas, monospace",
-    '--font-size-base': '1rem',
-    '--radius-sm': '4px',
-    '--radius-md': '8px',
-    '--radius-lg': '12px',
-    '--radius-full': '9999px',
-    '--shadow-sm': '0 1px 2px rgba(0, 0, 0, 0.05)',
-    '--shadow-md': '0 4px 6px rgba(0, 0, 0, 0.1)',
-    '--shadow-lg': '0 10px 15px rgba(0, 0, 0, 0.15)',
-    '--shadow-drawer': '0 -4px 20px rgba(0, 0, 0, 0.1)',
-    '--bezel-light': 'transparent',
-    '--bezel-dark': 'transparent',
-    '--glow': 'none',
-    '--scanlines': 'none',
-  },
-};
-
-const winampClassicTheme: Theme = {
-  id: 'winamp-classic',
-  name: 'Winamp Classic',
-  author: 'Skilljack',
-  version: '1.0.0',
-  variables: {
-    '--bg-primary': '#232323',
-    '--bg-secondary': '#2e2e2e',
-    '--bg-panel': '#3c3c3c',
-    '--bg-hover': '#4a4a4a',
-    '--bg-active': '#555555',
-    '--text-primary': '#00ff00',
-    '--text-secondary': '#00cc00',
-    '--text-muted': '#008800',
-    '--accent': '#ff6600',
-    '--accent-hover': '#ff8833',
-    '--accent-muted': '#cc5500',
-    '--success': '#00ff00',
-    '--error': '#ff0000',
-    '--warning': '#ffff00',
-    '--info': '#00ffff',
-    '--border': '#1a1a1a',
-    '--border-hover': '#4a4a4a',
-    '--font-family': "'Arial', 'Helvetica', sans-serif",
-    '--font-mono': "'Courier New', 'Courier', monospace",
-    '--font-size-base': '0.875rem',
-    '--radius-sm': '0px',
-    '--radius-md': '0px',
-    '--radius-lg': '0px',
-    '--radius-full': '0px',
-    '--shadow-sm': 'inset 1px 1px 0 var(--bezel-light), inset -1px -1px 0 var(--bezel-dark)',
-    '--shadow-md': 'inset 2px 2px 0 var(--bezel-light), inset -2px -2px 0 var(--bezel-dark)',
-    '--shadow-lg': 'inset 3px 3px 0 var(--bezel-light), inset -3px -3px 0 var(--bezel-dark)',
-    '--shadow-drawer': 'inset 0 3px 0 var(--bezel-light)',
-    '--bezel-light': '#5a5a5a',
-    '--bezel-dark': '#1a1a1a',
-    '--glow': '0 0 8px #00ff00',
-    '--scanlines': 'repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.1) 1px, rgba(0,0,0,0.1) 2px)',
-  },
-  customCss: `
-    /* Winamp-style LED display effect */
-    .chat-message[data-role='assistant'] .chat-message-bubble {
-      text-shadow: var(--glow);
-      background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
-    }
-
-    /* Beveled buttons */
-    .chat-send-button {
-      border: 2px outset #666;
-      border-radius: 0;
-    }
-
-    .chat-send-button:active {
-      border-style: inset;
-    }
-
-    /* Scanline effect on drawer */
-    .chat-drawer::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: var(--scanlines);
-      pointer-events: none;
-      opacity: 0.3;
-    }
-  `,
-};
-
 const terminalGreenTheme: Theme = {
   id: 'terminal-green',
   name: 'Terminal Green',
@@ -240,69 +90,6 @@ const terminalGreenTheme: Theme = {
   `,
 };
 
-const vaporwaveTheme: Theme = {
-  id: 'vaporwave',
-  name: 'Vaporwave',
-  author: 'Skilljack',
-  version: '1.0.0',
-  variables: {
-    '--bg-primary': '#1a0a2e',
-    '--bg-secondary': '#2d1b4e',
-    '--bg-panel': '#3d2a5e',
-    '--bg-hover': '#4d3a6e',
-    '--bg-active': '#5d4a7e',
-    '--text-primary': '#ff71ce',
-    '--text-secondary': '#b967ff',
-    '--text-muted': '#8b5fbf',
-    '--accent': '#01cdfe',
-    '--accent-hover': '#33d9ff',
-    '--accent-muted': '#0099cc',
-    '--success': '#05ffa1',
-    '--error': '#ff3366',
-    '--warning': '#fffb96',
-    '--info': '#01cdfe',
-    '--border': '#4d3a6e',
-    '--border-hover': '#6d5a8e',
-    '--font-family': "'Arial', 'Helvetica', sans-serif",
-    '--font-mono': "'VT323', 'Courier New', monospace",
-    '--font-size-base': '1rem',
-    '--radius-sm': '4px',
-    '--radius-md': '8px',
-    '--radius-lg': '16px',
-    '--radius-full': '9999px',
-    '--shadow-sm': '0 0 10px rgba(1, 205, 254, 0.3)',
-    '--shadow-md': '0 0 20px rgba(255, 113, 206, 0.4)',
-    '--shadow-lg': '0 0 30px rgba(185, 103, 255, 0.5)',
-    '--shadow-drawer': '0 -4px 30px rgba(255, 113, 206, 0.4), 0 -8px 60px rgba(1, 205, 254, 0.2)',
-    '--bezel-light': 'transparent',
-    '--bezel-dark': 'transparent',
-    '--glow': '0 0 10px currentColor',
-    '--scanlines': 'none',
-  },
-  customCss: `
-    /* Gradient background */
-    .chat-drawer {
-      background: linear-gradient(135deg, var(--bg-panel) 0%, #2d1b4e 50%, #1a0a2e 100%);
-    }
-
-    /* Neon glow on text */
-    .chat-message[data-role='user'] .chat-message-bubble {
-      background: linear-gradient(135deg, #01cdfe 0%, #b967ff 100%);
-      box-shadow: 0 0 15px rgba(1, 205, 254, 0.5);
-    }
-
-    .chat-message[data-role='assistant'] .chat-message-bubble {
-      border: 1px solid #ff71ce;
-      box-shadow: 0 0 10px rgba(255, 113, 206, 0.3);
-    }
-
-    /* Accent glow */
-    .chat-send-button {
-      box-shadow: 0 0 15px rgba(1, 205, 254, 0.5);
-    }
-  `,
-};
-
 const pixelPerfectTheme: Theme = {
   id: 'pixel-perfect',
   name: 'Pixel Perfect',
@@ -368,12 +155,8 @@ const pixelPerfectTheme: Theme = {
 };
 
 const builtInThemes: Theme[] = [
-  modernDarkTheme,
-  modernLightTheme,
-  winampClassicTheme,
-  terminalGreenTheme,
-  vaporwaveTheme,
   pixelPerfectTheme,
+  terminalGreenTheme,
 ];
 
 // ============================================
@@ -394,7 +177,7 @@ function loadSavedTheme(): Theme {
   } catch {
     // Ignore parse errors
   }
-  return modernDarkTheme;
+  return pixelPerfectTheme;
 }
 
 function loadCustomThemes(): Theme[] {
