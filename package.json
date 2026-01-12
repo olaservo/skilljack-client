@@ -26,6 +26,7 @@
   "license": "MIT",
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.9",
+    "@ai-sdk/openai": "^3.0.0",
     "@anthropic-ai/sdk": "^0.71.0",
     "@modelcontextprotocol/ext-apps": "^0.3.1",
     "@modelcontextprotocol/sdk": "^1.25.2",

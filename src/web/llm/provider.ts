@@ -13,6 +13,7 @@
 
 import { streamText, dynamicTool, jsonSchema, stepCountIs, type ModelMessage, type ToolSet } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
 import type { JSONSchema7, JSONSchema7Definition } from 'json-schema';
 import type { McpTool, ChatSettings, StreamEvent } from './types.js';
 import { THEME_LIST, getThemeMeta, formatThemeList } from '../shared/themes.js';
@@ -86,8 +87,15 @@ const providers: Record<string, ProviderFactory> = {
       getModel: (modelId: string) => anthropic(modelId),
     };
   },
-  // Can add more providers here:
-  // openai: (apiKey?: string) => { ... }
+  openai: (apiKey?: string) => {
+    const openai = createOpenAI({
+      apiKey: apiKey || process.env.OPENAI_API_KEY,
+    });
+    return {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      getModel: (modelId: string) => openai(modelId) as any,
+    };
+  },
 };
 
 /**
@@ -354,6 +362,10 @@ export async function* streamChat(options: StreamChatOptions): AsyncGenerator<St
   }
 
   // Stream the response (v6 API uses maxOutputTokens)
+  // maxTurns controls how many reasoning steps the model can take
+  // Doer: 1 step (fast, single action)
+  // Dreamer: multiple steps (deeper reasoning, can chain tool calls)
+  const maxTurns = settings.maxTurns ?? 1;
   const result = streamText({
     model,
     messages,
@@ -361,9 +373,7 @@ export async function* streamChat(options: StreamChatOptions): AsyncGenerator<St
     maxOutputTokens: settings.maxTokens || 4096,
     temperature: settings.temperature ?? 0.7,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
-    // Single step - tool results aren't fed back to LLM (execution is client-side)
-    // Multi-step would just confuse the LLM with fake { pending: true } results
-    stopWhen: stepCountIs(1),
+    stopWhen: stepCountIs(maxTurns),
   });
 
   // Iterate over the full stream (v6 API)

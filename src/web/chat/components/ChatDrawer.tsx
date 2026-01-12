@@ -16,6 +16,7 @@ import { ChatInput } from './ChatInput';
 import { ServerStatus } from './ServerStatus';
 import { ThemeToggle } from './ThemeToggle';
 import { ToolExecutor } from './ToolExecutor';
+import { SettingsDialog } from '../../settings';
 
 // Icons
 const TerminalIcon = () => <span style={{ fontWeight: 600 }}>&gt;_</span>;
@@ -93,6 +94,7 @@ export function ChatDrawer() {
             <ServerStatus servers={state.servers} />
           </div>
           <div className="chat-drawer-actions">
+            <SettingsDialog />
             <ThemeToggle />
             <button
               className="chat-header-button"

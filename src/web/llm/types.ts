@@ -54,6 +54,7 @@ export interface ChatSettings {
   modelId: string;
   temperature?: number;
   maxTokens?: number;
+  maxTurns?: number;
   systemPrompt?: string;
 }
 

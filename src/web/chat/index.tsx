@@ -9,6 +9,7 @@ import { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChatProvider, useChat } from './context/ChatContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { SettingsProvider } from '../settings';
 import { ChatDrawer } from './components/ChatDrawer';
 import './main.css';
 
@@ -32,9 +33,11 @@ function App() {
   return (
     <StrictMode>
       <ThemeProvider>
-        <ChatProvider>
-          <ChatBridge />
-        </ChatProvider>
+        <SettingsProvider>
+          <ChatProvider>
+            <ChatBridge />
+          </ChatProvider>
+        </SettingsProvider>
       </ThemeProvider>
     </StrictMode>
   );

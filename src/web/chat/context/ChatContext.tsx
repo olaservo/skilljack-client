@@ -22,6 +22,7 @@ import type {
   ServerInfo,
   McpTool,
 } from '../types';
+import { useSettings } from '../../settings';
 
 // ============================================
 // Initial State
@@ -213,6 +214,7 @@ interface ChatProviderProps {
 
 export function ChatProvider({ children }: ChatProviderProps) {
   const [state, dispatch] = useReducer(chatReducer, initialState);
+  const { doer, dreamer } = useSettings();
 
   // Convenience action creators
   const toggleDrawer = useCallback(() => dispatch({ type: 'TOGGLE_DRAWER' }), []);
@@ -264,7 +266,26 @@ export function ChatProvider({ children }: ChatProviderProps) {
     async (content: string) => {
       if (!content.trim() || state.isProcessing) return;
 
-      // Add user message
+      // Parse slash commands for model selection (Doer vs Dreamer)
+      let modelRole: 'doer' | 'dreamer' = 'doer';
+      let processedContent = content.trim();
+
+      if (processedContent.startsWith('/dream ')) {
+        modelRole = 'dreamer';
+        processedContent = processedContent.slice(7).trim();
+      } else if (processedContent === '/dream') {
+        // Just "/dream" with no content - show help
+        const helpMsg = addMessage({
+          role: 'system',
+          content: 'Usage: `/dream <your question>` - Use the Dreamer model for complex reasoning.',
+        });
+        return;
+      }
+
+      // Select model config based on role
+      const modelConfig = modelRole === 'dreamer' ? dreamer : doer;
+
+      // Add user message (show original content including /dream prefix)
       dispatch({ type: 'ADD_TO_HISTORY', value: content });
       dispatch({ type: 'SET_INPUT', value: '' });
       const userMsg = addMessage({ role: 'user', content });
@@ -275,11 +296,11 @@ export function ChatProvider({ children }: ChatProviderProps) {
       dispatch({ type: 'SET_STREAMING_MESSAGE', id: assistantMsg.id });
 
       try {
-        // Build chat messages for API
+        // Build chat messages for API (use processedContent without /dream prefix)
         const chatMessages = state.messages
           .filter((m) => m.role !== 'system' && m.content.trim())
           .map((m) => ({ role: m.role, content: m.content }));
-        chatMessages.push({ role: 'user', content });
+        chatMessages.push({ role: 'user', content: processedContent });
 
         // Build MCP context
         const mcpContext = {
@@ -287,7 +308,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
           availableTools: state.tools,
         };
 
-        // Call streaming API
+        // Call streaming API with selected model (Doer or Dreamer)
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -296,8 +317,10 @@ export function ChatProvider({ children }: ChatProviderProps) {
             messages: chatMessages,
             mcpContext,
             settings: {
-              provider: 'anthropic',
-              modelId: 'claude-sonnet-4-5-20250929',
+              provider: modelConfig.provider,
+              modelId: modelConfig.modelId,
+              temperature: modelConfig.temperature,
+              maxTurns: modelConfig.maxTurns,
             },
           }),
         });
@@ -387,7 +410,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
         dispatch({ type: 'SET_STREAMING_MESSAGE', id: null });
       }
     },
-    [state.isProcessing, state.messages, state.servers, state.tools, state.sessionId, addMessage]
+    [state.isProcessing, state.messages, state.servers, state.tools, state.sessionId, addMessage, doer, dreamer]
   );
 
   // Keyboard shortcut: Cmd/Ctrl+K to toggle
@@ -413,6 +436,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
         const serversRes = await fetch('/api/servers');
         if (serversRes.ok) {
           const data = await serversRes.json();
+          console.log('[Chat] Servers API response:', data.servers);
           const servers: ServerInfo[] = data.servers?.map((s: { name: string; toolCount: number; version?: string }) => ({
             name: s.name,
             version: s.version,
@@ -426,13 +450,17 @@ export function ChatProvider({ children }: ChatProviderProps) {
         const toolsRes = await fetch('/api/tools');
         if (toolsRes.ok) {
           const data = await toolsRes.json();
-          const tools: McpTool[] = data.tools?.map((t: { name: string; originalName?: string; serverName?: string; description?: string; inputSchema?: Record<string, unknown> }) => ({
+          console.log('[Chat] Tools API response:', data.tools);
+          const tools: McpTool[] = data.tools?.map((t: { name: string; displayName?: string; originalName?: string; serverName?: string; description?: string; inputSchema?: Record<string, unknown>; hasUi?: boolean; uiResourceUri?: string }) => ({
             name: t.name,
-            originalName: t.originalName || t.name,
+            originalName: t.displayName || t.originalName || t.name,
             serverName: t.serverName || 'default',
             description: t.description,
             inputSchema: t.inputSchema,
+            hasUi: t.hasUi,
+            uiResourceUri: t.uiResourceUri,
           })) || [];
+          console.log('[Chat] Processed tools:', tools.map(t => ({ name: t.name, serverName: t.serverName, hasUi: t.hasUi })));
           dispatch({ type: 'SET_TOOLS', tools });
         }
       } catch (err) {
