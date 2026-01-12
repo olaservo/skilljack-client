@@ -104,7 +104,7 @@
   gap: var(--space-sm);
   font-size: var(--font-size-sm);
   font-weight: 600;
-  color: #cccccc;
+  color: var(--chat-text);
 }
 
 .chat-drawer-status {
@@ -275,13 +275,13 @@
 }
 
 .tool-call-status[data-status='pending'] {
-  background-color: #4d4d00;
-  color: #cccc00;
+  background-color: rgba(204, 204, 0, 0.2);
+  color: var(--chat-warning);
 }
 
 .tool-call-status[data-status='executing'] {
-  background-color: #003366;
-  color: #66ccff;
+  background-color: rgba(86, 156, 214, 0.2);
+  color: var(--chat-accent);
 }
 
 .tool-call-status[data-status='completed'] {

@@ -3,15 +3,16 @@
 }
 
 :root {
-  --bg: #1a1a2e;
-  --bg-secondary: #16213e;
-  --text: #eee;
-  --text-muted: #888;
-  --accent: #0f3460;
-  --accent-hover: #1a4a7a;
-  --success: #00d26a;
-  --error: #ff6b6b;
-  --border: #333;
+  /* Map theme variables for main layout (with fallbacks for initial load) */
+  --bg: var(--bg-primary, #1a1a2e);
+  --bg-secondary: var(--bg-secondary, #16213e);
+  --text: var(--text-primary, #eee);
+  --text-muted: var(--text-muted, #888);
+  --accent: var(--accent, #0f3460);
+  --accent-hover: var(--accent-hover, #1a4a7a);
+  --success: var(--success, #00d26a);
+  --error: var(--error, #ff6b6b);
+  --border: var(--border, #333);
   --ui-badge: #e94560;
 }
 
