@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MCP Skilljack Client</title>
+  <title>Skilljack Sandbox</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/chat/bundle.css">
 </head>
 <body>
   <header>
-    <h1>MCP Skilljack Client</h1>
+    <h1>Skilljack Sandbox</h1>
     <div class="header-actions">
       <button id="chat-toggle-btn" class="header-chat-btn" onclick="window.toggleChat && window.toggleChat()">
         &gt;_ Chat
@@ -19,14 +19,24 @@
   </header>
 
   <main id="app-area">
-    <div id="app-container">
+    <!-- Layout mode switcher (hidden when no apps) -->
+    <div id="layout-controls" class="hidden">
+      <button data-layout="grid" class="active" title="Grid view">&#9638;</button>
+      <button data-layout="tabs" title="Tabs view">&#9776;</button>
+      <button data-layout="stack" title="Stack view">&#9868;</button>
+    </div>
+
+    <!-- Tab bar (only visible in tabs mode) -->
+    <div id="app-tabs" class="hidden"></div>
+
+    <div id="app-container" data-layout="grid">
       <div id="app-placeholder">
         <p>No MCP App loaded</p>
         <p class="hint">Use the chat to interact with connected servers</p>
       </div>
-      <div id="app-iframe-wrapper">
-        <!-- Sandbox iframe will be inserted here -->
-      </div>
+
+      <!-- Multi-panel container -->
+      <div id="app-panels"></div>
     </div>
   </main>
 

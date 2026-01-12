@@ -2,19 +2,26 @@
  * Browser-side MCP Apps Client
  *
  * Manages connection status and MCP App iframe embedding.
+ * Supports multiple app panels with configurable layout modes.
  * Tool interaction is handled via the chat drawer.
  */
 
 // State
 let config = null;
 let tools = [];
-let currentIframe = null;
 let ws = null;
+
+// Multi-panel state
+const appPanels = new Map();  // Map<key, AppPanel>
+let layoutMode = 'grid';      // 'grid' | 'tabs' | 'stack'
+let activeTabKey = null;
 
 // DOM Elements
 const connectionStatus = document.getElementById('connection-status');
 const appContainer = document.getElementById('app-container');
-const appIframeWrapper = document.getElementById('app-iframe-wrapper');
+const appPanelsContainer = document.getElementById('app-panels');
+const layoutControls = document.getElementById('layout-controls');
+const appTabs = document.getElementById('app-tabs');
 
 // Initialize
 async function init() {
@@ -31,6 +38,9 @@ async function init() {
     // Connect WebSocket for real-time updates
     connectWebSocket();
 
+    // Initialize layout controls
+    initLayoutControls();
+
     connectionStatus.textContent = config.multiServer
       ? `Connected (${config.serverCount} servers)`
       : 'Connected';
@@ -42,52 +52,245 @@ async function init() {
   }
 }
 
+// Initialize layout control buttons
+function initLayoutControls() {
+  const buttons = layoutControls.querySelectorAll('button[data-layout]');
+  buttons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      setLayoutMode(btn.dataset.layout);
+    });
+  });
+}
+
+// Set layout mode (grid, tabs, stack)
+function setLayoutMode(mode) {
+  layoutMode = mode;
+  appContainer.dataset.layout = mode;
+
+  // Update button states
+  const buttons = layoutControls.querySelectorAll('button[data-layout]');
+  buttons.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.layout === mode);
+  });
+
+  // Show/hide tab bar
+  appTabs.classList.toggle('hidden', mode !== 'tabs');
+
+  // In tabs mode, ensure one panel is active
+  if (mode === 'tabs' && appPanels.size > 0) {
+    if (!activeTabKey || !appPanels.has(activeTabKey)) {
+      activeTabKey = appPanels.keys().next().value;
+    }
+    setActiveTab(activeTabKey);
+  }
+}
+
+// Set active tab (for tabs mode)
+function setActiveTab(key) {
+  activeTabKey = key;
+
+  // Update tab buttons
+  document.querySelectorAll('.app-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.key === key);
+  });
+
+  // Update panel visibility
+  document.querySelectorAll('.app-panel').forEach(panel => {
+    panel.classList.toggle('active', panel.dataset.key === key);
+  });
+}
+
+// Update UI state based on panel count
+function updateUIState() {
+  const hasApps = appPanels.size > 0;
+  appContainer.classList.toggle('has-app', hasApps);
+  layoutControls.classList.toggle('hidden', !hasApps);
+  appTabs.classList.toggle('hidden', layoutMode !== 'tabs' || !hasApps);
+}
+
+// Create a tab button for a panel
+function createTab(key, toolName, serverName) {
+  const tab = document.createElement('button');
+  tab.className = 'app-tab';
+  tab.dataset.key = key;
+
+  const label = document.createElement('span');
+  label.textContent = `${toolName} (${serverName})`;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'app-tab-close';
+  closeBtn.innerHTML = '&times;';
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closePanel(key);
+  });
+
+  tab.appendChild(label);
+  tab.appendChild(closeBtn);
+  tab.addEventListener('click', () => setActiveTab(key));
+
+  appTabs.appendChild(tab);
+}
+
+// Close a panel by key
+function closePanel(key) {
+  const panel = appPanels.get(key);
+  if (!panel) return;
+
+  // Cleanup iframe event listeners
+  if (panel.cleanup) {
+    panel.cleanup();
+  }
+
+  // Remove DOM elements
+  panel.wrapper.remove();
+
+  // Remove tab if exists
+  const tab = document.querySelector(`.app-tab[data-key="${key}"]`);
+  if (tab) tab.remove();
+
+  // Remove from map
+  appPanels.delete(key);
+
+  // If this was the active tab, switch to another
+  if (layoutMode === 'tabs' && activeTabKey === key) {
+    const nextKey = appPanels.keys().next().value || null;
+    if (nextKey) {
+      setActiveTab(nextKey);
+    } else {
+      activeTabKey = null;
+    }
+  }
+
+  // Update UI state
+  updateUIState();
+}
+
+// Create a new panel
+async function createNewPanel(key, serverName, uiResourceUri, toolInput, toolResult) {
+  // Fetch UI resource
+  const uriPath = config?.multiServer
+    ? `${encodeURIComponent(serverName)}/${encodeURIComponent(uiResourceUri)}`
+    : encodeURIComponent(uiResourceUri);
+
+  const res = await fetch(`/api/ui-resource/${uriPath}`);
+  if (!res.ok) throw new Error('Failed to fetch UI resource');
+  const uiResource = await res.json();
+
+  // Extract tool name for display
+  const toolName = uiResourceUri.split('/').pop() || uiResourceUri;
+
+  // Create panel wrapper
+  const wrapper = document.createElement('div');
+  wrapper.className = 'app-panel';
+  wrapper.dataset.key = key;
+
+  // Create header
+  const header = document.createElement('div');
+  header.className = 'panel-header';
+
+  const title = document.createElement('span');
+  title.className = 'panel-title';
+  title.textContent = `${toolName} (${serverName})`;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'panel-close';
+  closeBtn.title = 'Close';
+  closeBtn.innerHTML = '&times;';
+  closeBtn.addEventListener('click', () => closePanel(key));
+
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+
+  // Create content area
+  const content = document.createElement('div');
+  content.className = 'panel-content';
+
+  // Create iframe
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+  iframe.src = `http://localhost:${config.sandboxPort}/sandbox.html`;
+
+  content.appendChild(iframe);
+  wrapper.appendChild(header);
+  wrapper.appendChild(content);
+
+  // Add to panels container
+  appPanelsContainer.appendChild(wrapper);
+
+  // Wait for sandbox ready
+  await waitForSandboxReady(iframe);
+
+  // Set up message bridge (returns cleanup function)
+  const cleanup = setupAppBridge(iframe, uiResource, toolInput, toolResult);
+
+  // Store panel info
+  appPanels.set(key, {
+    key,
+    iframe,
+    wrapper,
+    serverName,
+    toolName,
+    uiResourceUri,
+    cleanup,
+  });
+
+  // Create tab if in tabs mode
+  if (layoutMode === 'tabs') {
+    createTab(key, toolName, serverName);
+    setActiveTab(key);
+  }
+
+  // Update UI state
+  updateUIState();
+}
+
+// Update existing panel with new data
+function updateExistingPanel(panel, toolInput, toolResult) {
+  sendToApp(panel.iframe, {
+    jsonrpc: '2.0',
+    method: 'ui/toolInput',
+    params: { arguments: toolInput },
+  });
+
+  sendToApp(panel.iframe, {
+    jsonrpc: '2.0',
+    method: 'ui/toolResult',
+    params: toolResult,
+  });
+}
+
 // Expose loadMcpApp globally for chat to use
 window.loadMcpApp = async function(serverName, uiResourceUri, toolInput, toolResult) {
   try {
-    // Fetch UI resource HTML (include server name for multi-server routing)
-    const uriPath = config?.multiServer
-      ? `${encodeURIComponent(serverName)}/${encodeURIComponent(uiResourceUri)}`
-      : encodeURIComponent(uiResourceUri);
+    // Generate key from qualified tool name
+    const key = `${serverName}__${uiResourceUri}`;
 
-    const res = await fetch(`/api/ui-resource/${uriPath}`);
-    if (!res.ok) {
-      throw new Error('Failed to fetch UI resource');
+    // Check if panel already exists for this tool
+    const existingPanel = appPanels.get(key);
+
+    if (existingPanel) {
+      // REPLACE: Update existing panel with new data
+      updateExistingPanel(existingPanel, toolInput, toolResult);
+
+      // If in tabs mode, switch to this panel
+      if (layoutMode === 'tabs') {
+        setActiveTab(key);
+      }
+    } else {
+      // ADD: Create new panel
+      await createNewPanel(key, serverName, uiResourceUri, toolInput, toolResult);
     }
-    const uiResource = await res.json();
-
-    // Show app container
-    appContainer.classList.add('has-app');
-
-    // Create sandbox iframe
-    const iframe = document.createElement('iframe');
-    iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
-    iframe.src = `http://localhost:${config.sandboxPort}/sandbox.html`;
-
-    // Wait for sandbox proxy to be ready
-    const proxyReady = waitForSandboxReady(iframe);
-
-    appIframeWrapper.innerHTML = '';
-    appIframeWrapper.appendChild(iframe);
-    currentIframe = iframe;
-
-    await proxyReady;
-
-    // Set up message handler for app communication
-    setupAppBridge(iframe, uiResource, toolInput, toolResult);
   } catch (error) {
     console.error('Failed to load MCP App:', error);
-    appContainer.classList.remove('has-app');
   }
 };
 
 window.clearMcpApp = function() {
-  if (currentIframe && currentIframe._cleanup) {
-    currentIframe._cleanup();
+  // Close all panels
+  for (const key of [...appPanels.keys()]) {
+    closePanel(key);
   }
-  appIframeWrapper.innerHTML = '';
-  currentIframe = null;
-  appContainer.classList.remove('has-app');
 };
 
 function waitForSandboxReady(iframe) {
@@ -223,14 +426,14 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
         console.log(`[App ${data.params.level}]`, data.params.data);
       }
 
-      // App sends size change notification
+      // App sends size change notification - handle per-panel
       if (data.method === 'ui/notifications/size-changed') {
         const { width, height } = data.params;
         console.log('[Host] Size change:', width, 'x', height);
-        // Resize the wrapper to match the app's requested size
-        // (iframe has height: 100% so it will fill the wrapper)
-        if (height && height > 0) {
-          appIframeWrapper.style.minHeight = `${height}px`;
+        // Find the panel content wrapper for this iframe
+        const panelContent = iframe.closest('.app-panel')?.querySelector('.panel-content');
+        if (panelContent && height && height > 0) {
+          panelContent.style.minHeight = `${height}px`;
         }
       }
 
@@ -238,8 +441,9 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
       if (data.method === 'ui/sizeChanged' && data.id) {
         const { width, height } = data.params;
         console.log('[Host] Size change requested:', width, 'x', height);
-        if (height && height > 0) {
-          appIframeWrapper.style.minHeight = `${height}px`;
+        const panelContent = iframe.closest('.app-panel')?.querySelector('.panel-content');
+        if (panelContent && height && height > 0) {
+          panelContent.style.minHeight = `${height}px`;
         }
         sendToApp(iframe, {
           jsonrpc: '2.0',
@@ -257,7 +461,7 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
   let html = uiResource.text || uiResource.html;
   if (!html) {
     console.error('[Host] UI resource has no HTML content:', uiResource);
-    return;
+    return () => window.removeEventListener('message', messageHandler);
   }
   const hostOriginScript = `<script>window.__HOST_ORIGIN__ = "${window.location.origin}";</script>`;
   if (html.includes('<head>')) {
@@ -277,8 +481,8 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
     },
   });
 
-  // Store cleanup function
-  iframe._cleanup = () => {
+  // Return cleanup function
+  return () => {
     window.removeEventListener('message', messageHandler);
   };
 }
