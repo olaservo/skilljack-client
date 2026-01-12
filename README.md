@@ -1,79 +1,6 @@
-# MCP Skilljack Client
+# Skilljack Client
 
-Modular, composable building blocks for MCP clients. Each capability is standalone - copy what you need.
-
-## Quick Start
-
-```bash
-npm install
-npm run build
-npm start -- --stdio "node path/to/server.js"
-```
-
-## Architecture
-
-```
-src/
-  capabilities/       # Standalone capability modules
-    sampling.ts       # setupSampling(client, config)
-    elicitation.ts    # setupElicitation(client, config)
-    roots.ts          # setupRoots(client, paths)
-    list-changed.ts   # setupListChanged(client, callbacks)
-    subscriptions.ts  # setupSubscriptions(client, callback)
-    logging.ts        # setupLogging(client, callback)
-    completions.ts    # completePromptArgument(), pickCompletion()
-
-  transports/         # Transport helpers
-    stdio.ts          # createStdioTransport(cmd, args)
-    http.ts           # createHttpTransport(url, headers)
-
-  instructions.ts     # combineInstructions() - merge instruction sources
-  config.ts           # loadConfig() - load mcp-client.json
-
-  index.ts            # CLI demo composing capabilities
-```
-
-## Usage
-
-Each module is self-contained. Copy one file into your project:
-
-```typescript
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { setupSampling } from './capabilities/sampling.js';
-import { setupRoots } from './capabilities/roots.js';
-import { createStdioTransport } from './transports/stdio.js';
-
-// 1. Create client with capabilities declared
-const client = new Client(
-  { name: 'my-client', version: '1.0.0' },
-  { capabilities: { sampling: {}, roots: { listChanged: true } } }
-);
-
-// 2. Set up only what you need
-setupSampling(client, { apiKey: process.env.ANTHROPIC_API_KEY });
-setupRoots(client, ['/workspace']);
-
-// 3. Connect
-await client.connect(createStdioTransport('node', ['server.js']));
-
-// 4. Use the client
-const tools = await client.listTools();
-await client.callTool({ name: 'my-tool', arguments: {} });
-```
-
-## Capabilities
-
-| Module | What it does |
-|--------|--------------|
-| `sampling.ts` | Handle `sampling/createMessage` requests from servers |
-| `elicitation.ts` | Handle `elicitation/create` requests (form/URL modes) |
-| `roots.ts` | Expose filesystem roots via `roots/list` |
-| `list-changed.ts` | React to `tools/prompts/resources` list changes |
-| `subscriptions.ts` | Handle `resources/updated` notifications |
-| `logging.ts` | Receive server log messages |
-| `completions.ts` | Argument autocompletion for prompts/resources |
-| `instructions.ts` | Combine server instructions from multiple sources |
-| `config.ts` | Load client configuration from JSON file |
+Modular sandbox client for showcasing in MCP Apps, servers as agents, and other advanced capabilities.
 
 ## CLI Options
 
@@ -118,28 +45,13 @@ Create `mcp-client.json` in the current directory or home directory:
 }
 ```
 
-### Transparency
-
-Active instructions are logged on connect with source attribution:
-
-```
-Active instructions:
-  [MCP Server] Server-provided instructions here...
-  [Config] Config file instructions here...
-  [CLI] CLI flag instructions here...
-```
-
-### Security Note
-
-Instructions are probabilistic guidance - they influence LLM behavior but don't guarantee it. Do NOT rely on instructions for security-critical operations. Use deterministic code checks, hooks, or tool-level validation instead.
-
 ## Design Principles
 
-1. **Each file is standalone** - No dependencies between capabilities
-2. **Thin wrappers** - Minimal abstraction over the SDK
-3. **Functions over classes** - `setupX(client)` pattern
-4. **Copy-paste friendly** - Each file has usage examples
-5. **Domain-agnostic** - No hardcoded tools, prompts, or workflows
+1. **Thin wrappers** - Minimal abstraction over the SDK
+2. **Functions over classes** - `setupX(client)` pattern
+3. **Domain-agnostic** - Minimal hardcoded tools, prompts, or workflows
+4. **Flexibility and modularity vs baked-in agents or complex frameworks** - Agent Skills and MCP Servers provide specialized knowledge, actions, and behaviors through progressive discovery and dynamic capabilities.
+5. **Customizable and fun** - Inspired by old school Winamp skins, GeoCities, and the creative chaos of the early web. Your tools should look however you want.
 
 ## License
 

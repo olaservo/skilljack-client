@@ -16,7 +16,8 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 export function createStdioTransport(
   command: string,
   args: string[] = [],
-  env?: Record<string, string>
+  env?: Record<string, string>,
+  cwd?: string
 ): StdioClientTransport {
   // Filter out undefined values from process.env and merge with custom env
   const mergedEnv = env
@@ -31,6 +32,7 @@ export function createStdioTransport(
     command,
     args,
     env: mergedEnv,
+    cwd,
   });
 }
 

@@ -51,6 +51,8 @@ export interface McpTool {
   serverName: string;
   description?: string;
   inputSchema?: Record<string, unknown>;
+  hasUi?: boolean;           // Tool has MCP App UI
+  uiResourceUri?: string;    // URI of UI resource
 }
 
 export interface McpContext {

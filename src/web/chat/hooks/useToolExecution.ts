@@ -4,12 +4,25 @@
  * Executes tool calls from LLM responses.
  * Routes theme tools to client-side execution via useThemeTools.
  * Routes MCP tools to server API.
+ * Loads MCP Apps for tools with UI resources.
  */
 
 import { useCallback } from 'react';
 import { useChat } from '../context/ChatContext';
 import { useThemeTools, isThemeTool } from './useThemeTools';
 import type { ChatToolCall } from '../types';
+
+// Declare global loadMcpApp function from app.js
+declare global {
+  interface Window {
+    loadMcpApp?: (
+      serverName: string,
+      uiResourceUri: string,
+      toolInput: Record<string, unknown>,
+      toolResult: unknown
+    ) => Promise<void>;
+  }
+}
 
 export interface ToolExecutionResult {
   success: boolean;
@@ -18,8 +31,16 @@ export interface ToolExecutionResult {
 }
 
 export function useToolExecution() {
-  const { updateToolCall } = useChat();
+  const { updateToolCall, state } = useChat();
   const { executeThemeTool } = useThemeTools();
+
+  // Find tool info by name to get UI resource info
+  const getToolInfo = useCallback(
+    (toolName: string) => {
+      return state.tools.find((t) => t.name === toolName);
+    },
+    [state.tools]
+  );
 
   /**
    * Execute a single tool call
@@ -58,6 +79,21 @@ export function useToolExecution() {
             content: data.result ?? data,
             isError: data.isError ?? false,
           };
+
+          // Load MCP App if tool has UI resource
+          const toolInfo = getToolInfo(toolCall.name);
+          if (toolInfo?.hasUi && toolInfo.uiResourceUri && window.loadMcpApp) {
+            try {
+              await window.loadMcpApp(
+                toolInfo.serverName,
+                toolInfo.uiResourceUri,
+                toolCall.arguments,
+                result.content
+              );
+            } catch (err) {
+              console.error('[Chat] Failed to load MCP App:', err);
+            }
+          }
         }
 
         // Update tool call with result
@@ -88,7 +124,7 @@ export function useToolExecution() {
         };
       }
     },
-    [updateToolCall, executeThemeTool]
+    [updateToolCall, executeThemeTool, getToolInfo]
   );
 
   /**
