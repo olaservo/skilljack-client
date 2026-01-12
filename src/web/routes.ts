@@ -146,9 +146,17 @@ export function createMultiServerRouteHandler(
 
       // GET /api/tools - List tools from all servers with UI info
       // Injects built-in tool-manager and filters disabled tools
+      // Optional: ?hasUi=true to filter for UI tools only
       if (method === 'GET' && path === '/api/tools') {
+        const hasUiParam = url.searchParams.get('hasUi');
         const tools = await aggregateTools(clients);
-        const toolsWithUI = toolsToUIInfo(tools);
+        let toolsWithUI = toolsToUIInfo(tools);
+
+        // Filter by hasUi if requested
+        if (hasUiParam === 'true') {
+          toolsWithUI = toolsWithUI.filter((t) => t.hasUi);
+        }
+
         // Add tool-manager pseudo-tool at the beginning, filter disabled tools
         const allTools = [TOOL_MANAGER_TOOL, ...filterEnabledTools(toolsWithUI)];
         sendJSON(res, { tools: allTools });
@@ -156,9 +164,17 @@ export function createMultiServerRouteHandler(
       }
 
       // GET /api/tool-manager/tools - List ALL tools with enabled state (for tool manager UI)
+      // Optional: ?hasUi=true to filter for UI tools only
       if (method === 'GET' && path === '/api/tool-manager/tools') {
+        const hasUiParam = url.searchParams.get('hasUi');
         const tools = await aggregateTools(clients);
-        const toolsWithUI = toolsToUIInfo(tools);
+        let toolsWithUI = toolsToUIInfo(tools);
+
+        // Filter by hasUi if requested
+        if (hasUiParam === 'true') {
+          toolsWithUI = toolsWithUI.filter((t) => t.hasUi);
+        }
+
         const toolsWithState = addEnabledState(toolsWithUI);
         sendJSON(res, { tools: toolsWithState });
         return;

@@ -177,6 +177,24 @@
       cursor: pointer;
     }
 
+    .ui-filter {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-secondary);
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .ui-filter input {
+      cursor: pointer;
+    }
+
     .tool-list {
       display: flex;
       flex-direction: column;
@@ -345,6 +363,10 @@
         <select class="filter-select" id="server-filter">
           <option value="">All Servers</option>
         </select>
+        <label class="ui-filter">
+          <input type="checkbox" id="ui-only">
+          <span>UI only</span>
+        </label>
       </div>
       <div class="tool-list" id="tool-list">
         <div class="loading">Loading tools...</div>
@@ -483,8 +505,10 @@
     function renderTools() {
       const search = searchInput.value.toLowerCase();
       const server = serverFilter.value;
+      const uiOnly = document.getElementById('ui-only').checked;
 
       const filtered = tools.filter(tool => {
+        if (uiOnly && !tool.hasUi) return false;
         if (server && tool.serverName !== server) return false;
         if (search) {
           const searchable = `${tool.name} ${tool.displayName} ${tool.description || ''}`.toLowerCase();
@@ -541,6 +565,7 @@
     // Event listeners
     searchInput.addEventListener('input', renderTools);
     serverFilter.addEventListener('change', renderTools);
+    document.getElementById('ui-only').addEventListener('change', renderTools);
 
     // Initial load
     Promise.all([fetchServers(), fetchTools()]);
