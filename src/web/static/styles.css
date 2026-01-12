@@ -68,7 +68,7 @@ header h1 {
 .header-chat-btn {
   padding: 0.5rem 1rem;
   background: var(--accent);
-  color: var(--text);
+  color: var(--text-on-accent, #fff);
   border: 1px solid var(--border);
   border-radius: 6px;
   cursor: pointer;
