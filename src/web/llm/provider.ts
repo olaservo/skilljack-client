@@ -361,8 +361,9 @@ export async function* streamChat(options: StreamChatOptions): AsyncGenerator<St
     maxOutputTokens: settings.maxTokens || 4096,
     temperature: settings.temperature ?? 0.7,
     tools: Object.keys(tools).length > 0 ? tools : undefined,
-    // Allow LLM to continue after tool calls (default is stepCountIs(1))
-    stopWhen: stepCountIs(3),
+    // Single step - tool results aren't fed back to LLM (execution is client-side)
+    // Multi-step would just confuse the LLM with fake { pending: true } results
+    stopWhen: stepCountIs(1),
   });
 
   // Iterate over the full stream (v6 API)

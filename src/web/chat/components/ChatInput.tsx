@@ -8,7 +8,7 @@
  * - Enter to send, Shift+Enter for newline
  */
 
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { useChat } from '../context/ChatContext';
 
 const SendIcon = () => (
@@ -20,6 +20,16 @@ const SendIcon = () => (
 export function ChatInput() {
   const { state, setInput, sendMessage, navigateHistory } = useChat();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-focus textarea when drawer opens
+  useEffect(() => {
+    if (state.isOpen && textareaRef.current) {
+      // Small delay to ensure drawer animation has started
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 50);
+    }
+  }, [state.isOpen]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

@@ -132,15 +132,19 @@ header h1 {
 #app-iframe-wrapper {
   display: none;
   flex: 1;
-  background: #fff;
+  background: var(--bg);
   min-height: 0;
+  position: relative;
 }
 
 #app-container.has-app #app-iframe-wrapper {
-  display: flex;
+  display: block;
 }
 
 #app-iframe-wrapper iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   border: none;

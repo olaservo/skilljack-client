@@ -157,19 +157,39 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
       // App requests to call a tool (MCP standard method)
       if (data.method === 'tools/call' && data.id) {
         try {
-          const result = await fetch(`/api/tools/${encodeURIComponent(data.params.name)}`, {
+          // Qualify tool name with server name if not already qualified
+          let toolName = data.params.name;
+          if (!toolName.includes('__') && uiResource.serverName) {
+            toolName = `${uiResource.serverName}__${toolName}`;
+          }
+
+          console.log('[Host] Calling tool:', toolName);
+          const result = await fetch(`/api/tools/${encodeURIComponent(toolName)}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data.params.arguments || {}),
           });
           const callResult = await result.json();
 
-          sendToApp(iframe, {
-            jsonrpc: '2.0',
-            id: data.id,
-            result: callResult,
-          });
+          // Check for API error response
+          if (!result.ok || callResult.error) {
+            const errorMessage = callResult.error || `HTTP ${result.status}`;
+            console.error('[Host] Tool call error:', errorMessage);
+            sendToApp(iframe, {
+              jsonrpc: '2.0',
+              id: data.id,
+              error: { code: -32603, message: errorMessage },
+            });
+          } else {
+            console.log('[Host] Tool call success');
+            sendToApp(iframe, {
+              jsonrpc: '2.0',
+              id: data.id,
+              result: callResult,
+            });
+          }
         } catch (error) {
+          console.error('[Host] Tool call exception:', error);
           sendToApp(iframe, {
             jsonrpc: '2.0',
             id: data.id,
@@ -203,9 +223,24 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
         console.log(`[App ${data.params.level}]`, data.params.data);
       }
 
-      // App requests size change
+      // App sends size change notification
+      if (data.method === 'ui/notifications/size-changed') {
+        const { width, height } = data.params;
+        console.log('[Host] Size change:', width, 'x', height);
+        // Resize the wrapper to match the app's requested size
+        // (iframe has height: 100% so it will fill the wrapper)
+        if (height && height > 0) {
+          appIframeWrapper.style.minHeight = `${height}px`;
+        }
+      }
+
+      // Legacy: App requests size change (request form)
       if (data.method === 'ui/sizeChanged' && data.id) {
-        console.log('[Host] Size change requested:', data.params);
+        const { width, height } = data.params;
+        console.log('[Host] Size change requested:', width, 'x', height);
+        if (height && height > 0) {
+          appIframeWrapper.style.minHeight = `${height}px`;
+        }
         sendToApp(iframe, {
           jsonrpc: '2.0',
           id: data.id,
@@ -217,13 +252,27 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
 
   window.addEventListener('message', messageHandler);
 
+  // Inject host origin into HTML so apps can make API calls back to host
+  // UI resources return HTML in 'text' property (per MCP resource format)
+  let html = uiResource.text || uiResource.html;
+  if (!html) {
+    console.error('[Host] UI resource has no HTML content:', uiResource);
+    return;
+  }
+  const hostOriginScript = `<script>window.__HOST_ORIGIN__ = "${window.location.origin}";</script>`;
+  if (html.includes('<head>')) {
+    html = html.replace('<head>', `<head>${hostOriginScript}`);
+  } else {
+    html = hostOriginScript + html;
+  }
+
   // Send HTML to sandbox - app will load, call connect(), and send ui/initialize
   console.log('[Host] Sending sandbox-resource-ready with HTML...');
   sendToApp(iframe, {
     jsonrpc: '2.0',
     method: 'ui/notifications/sandbox-resource-ready',
     params: {
-      html: uiResource.html,
+      html,
       csp: uiResource.csp,
     },
   });

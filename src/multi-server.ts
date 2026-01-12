@@ -65,6 +65,7 @@ export interface StdioServerConfig {
   command: string;
   args?: string[];
   env?: Record<string, string>;
+  cwd?: string;
 }
 
 export interface HttpServerConfig {
@@ -216,7 +217,7 @@ export async function connectToServer(
 ): Promise<Client> {
   const transport =
     config.transport === 'stdio'
-      ? createStdioTransport(config.command, config.args, config.env)
+      ? createStdioTransport(config.command, config.args, config.env, config.cwd)
       : createHttpTransport(config.url, config.headers);
 
   const client = new Client(
@@ -420,21 +421,31 @@ export async function aggregateResources(
 // TOOL CALLING
 // ============================================================================
 
+/** Options for tool calls */
+export interface CallToolOptions {
+  /** Request timeout in milliseconds (default: 60000) */
+  timeout?: number;
+}
+
 /**
  * Call a tool using its qualified name (server__tool).
  *
  * @param clients - Map of connected clients
  * @param qualifiedToolName - Qualified tool name (e.g., "weather__get-forecast")
  * @param args - Tool arguments
+ * @param options - Optional settings like timeout
  * @returns Tool result with server name
  *
  * @example
  * const { serverName, result } = await callTool(clients, "weather__get-forecast", { city: "Seattle" });
+ * // With longer timeout for slow operations
+ * const { result } = await callTool(clients, "system-monitor__refresh-stats", {}, { timeout: 120000 });
  */
 export async function callTool(
   clients: Map<string, Client>,
   qualifiedToolName: string,
-  args: Record<string, unknown> = {}
+  args: Record<string, unknown> = {},
+  options?: CallToolOptions
 ): Promise<{ serverName: string; result: Awaited<ReturnType<Client['callTool']>> }> {
   const { serverName, name: toolName } = parseQualifiedName(qualifiedToolName);
 
@@ -445,14 +456,25 @@ export async function callTool(
     );
   }
 
-  const result = await client.callTool({ name: toolName, arguments: args });
+  const result = await client.callTool(
+    { name: toolName, arguments: args },
+    undefined, // resultSchema
+    { timeout: options?.timeout }
+  );
   return { serverName, result };
 }
 
 /**
  * @deprecated Use callTool() instead. This alias exists for migration.
  */
-export const callToolAcrossServers = callTool;
+export async function callToolAcrossServers(
+  clients: Map<string, Client>,
+  qualifiedToolName: string,
+  args: Record<string, unknown> = {},
+  options?: CallToolOptions
+): Promise<{ serverName: string; result: Awaited<ReturnType<Client['callTool']>> }> {
+  return callTool(clients, qualifiedToolName, args, options);
+}
 
 // ============================================================================
 // PROMPT / RESOURCE ACCESS

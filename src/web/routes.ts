@@ -6,6 +6,9 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { getToolUiResourceUri, fetchUIResource } from '../capabilities/apps.js';
 import {
@@ -16,6 +19,17 @@ import {
   getServersSummary,
   type AggregatedTool,
 } from '../multi-server.js';
+import {
+  isToolEnabled,
+  setToolEnabled,
+  addEnabledState,
+  filterEnabledTools,
+  isServerEnabled,
+  setServerEnabled,
+  getServersWithState,
+} from './tool-manager-state.js';
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 export type RouteHandler = (
   req: IncomingMessage,
@@ -52,6 +66,16 @@ interface ToolWithUIInfo {
   uiResourceUri?: string;
   serverName: string;
 }
+
+/** Built-in tool-manager pseudo-tool */
+const TOOL_MANAGER_TOOL: ToolWithUIInfo = {
+  name: 'tool-manager__manage-tools',
+  displayName: 'manage-tools',
+  description: 'View and enable/disable tools from connected MCP servers',
+  hasUi: true,
+  uiResourceUri: 'builtin://tool-manager',
+  serverName: 'tool-manager',
+};
 
 /** Convert aggregated tools to UI info format */
 function toolsToUIInfo(tools: AggregatedTool[]): ToolWithUIInfo[] {
@@ -121,10 +145,53 @@ export function createMultiServerRouteHandler(
       }
 
       // GET /api/tools - List tools from all servers with UI info
+      // Injects built-in tool-manager and filters disabled tools
       if (method === 'GET' && path === '/api/tools') {
         const tools = await aggregateTools(clients);
         const toolsWithUI = toolsToUIInfo(tools);
-        sendJSON(res, { tools: toolsWithUI });
+        // Add tool-manager pseudo-tool at the beginning, filter disabled tools
+        const allTools = [TOOL_MANAGER_TOOL, ...filterEnabledTools(toolsWithUI)];
+        sendJSON(res, { tools: allTools });
+        return;
+      }
+
+      // GET /api/tool-manager/tools - List ALL tools with enabled state (for tool manager UI)
+      if (method === 'GET' && path === '/api/tool-manager/tools') {
+        const tools = await aggregateTools(clients);
+        const toolsWithUI = toolsToUIInfo(tools);
+        const toolsWithState = addEnabledState(toolsWithUI);
+        sendJSON(res, { tools: toolsWithState });
+        return;
+      }
+
+      // PUT /api/tool-manager/tools/:name - Set tool enabled state
+      if (method === 'PUT' && path.startsWith('/api/tool-manager/tools/')) {
+        const toolName = decodeURIComponent(path.slice('/api/tool-manager/tools/'.length));
+        const body = await readBody(req);
+        const { enabled } = body ? JSON.parse(body) : { enabled: true };
+
+        setToolEnabled(toolName, enabled);
+        sendJSON(res, { name: toolName, enabled: isToolEnabled(toolName) });
+        return;
+      }
+
+      // GET /api/tool-manager/servers - List servers with enabled state
+      if (method === 'GET' && path === '/api/tool-manager/servers') {
+        const tools = await aggregateTools(clients);
+        const toolsWithUI = toolsToUIInfo(tools);
+        const servers = getServersWithState(toolsWithUI);
+        sendJSON(res, { servers });
+        return;
+      }
+
+      // PUT /api/tool-manager/servers/:name - Set server enabled state
+      if (method === 'PUT' && path.startsWith('/api/tool-manager/servers/')) {
+        const serverName = decodeURIComponent(path.slice('/api/tool-manager/servers/'.length));
+        const body = await readBody(req);
+        const { enabled } = body ? JSON.parse(body) : { enabled: true };
+
+        setServerEnabled(serverName, enabled);
+        sendJSON(res, { name: serverName, enabled: isServerEnabled(serverName) });
         return;
       }
 
@@ -134,7 +201,19 @@ export function createMultiServerRouteHandler(
         const body = await readBody(req);
         const args = body ? JSON.parse(body) : {};
 
-        const { serverName, result } = await callToolAcrossServers(clients, toolName, args);
+        // Handle built-in tool-manager pseudo-tool (no actual execution needed)
+        if (toolName === 'tool-manager__manage-tools') {
+          sendJSON(res, {
+            content: [{ type: 'text', text: 'Tool manager opened.' }],
+            serverName: 'tool-manager',
+          });
+          return;
+        }
+
+        // Use longer timeout (120s) for potentially slow system operations
+        const { serverName, result } = await callToolAcrossServers(clients, toolName, args, {
+          timeout: 120000,
+        });
         sendJSON(res, { ...result, serverName });
         return;
       }
@@ -190,6 +269,27 @@ export function createMultiServerRouteHandler(
         } else {
           serverName = clients.keys().next().value || 'default';
           uri = decodeURIComponent(rest);
+        }
+
+        // Handle built-in tool-manager UI resource
+        if (serverName === 'tool-manager' && uri === 'builtin://tool-manager') {
+          try {
+            // Look for the HTML in static/tool-manager/mcp-app.html
+            const staticDir = __dirname.includes('dist')
+              ? join(__dirname, '..', '..', 'src', 'web', 'static')
+              : join(__dirname, 'static');
+            const htmlPath = join(staticDir, 'tool-manager', 'mcp-app.html');
+            const html = await readFile(htmlPath, 'utf-8');
+            sendJSON(res, {
+              uri,
+              mimeType: 'text/html;mcp-app',
+              text: html,
+              serverName: 'tool-manager',
+            });
+          } catch (err) {
+            sendError(res, 'Tool manager UI not found', 404);
+          }
+          return;
         }
 
         const client = clients.get(serverName);
