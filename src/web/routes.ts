@@ -10,7 +10,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { getToolUiResourceUri, fetchUIResource } from '../capabilities/apps.js';
+import { getToolUiResourceUri, fetchUIResource, isToolVisibleToModel } from '../capabilities/apps.js';
 import {
   aggregateTools,
   aggregatePrompts,
@@ -135,10 +135,11 @@ export function createMultiServerRouteHandler(
       }
 
       // GET /api/config - Web UI config (sandbox port, etc.)
+      // Always use multi-server mode in web UI since we have the built-in tool-manager
       if (method === 'GET' && path === '/api/config') {
         sendJSON(res, {
           sandboxPort,
-          multiServer: clients.size > 1,
+          multiServer: true,
           serverCount: clients.size,
         });
         return;
@@ -147,10 +148,14 @@ export function createMultiServerRouteHandler(
       // GET /api/tools - List tools from all servers with UI info
       // Injects built-in tool-manager and filters disabled tools
       // Optional: ?hasUi=true to filter for UI tools only
+      // Filters out app-only tools (visibility: ["app"]) that shouldn't be sent to LLM
       if (method === 'GET' && path === '/api/tools') {
         const hasUiParam = url.searchParams.get('hasUi');
-        const tools = await aggregateTools(clients);
-        let toolsWithUI = toolsToUIInfo(tools);
+        const allAggregatedTools = await aggregateTools(clients);
+
+        // Filter out app-only tools (those not visible to model/LLM)
+        const modelVisibleTools = allAggregatedTools.filter((t) => isToolVisibleToModel(t));
+        let toolsWithUI = toolsToUIInfo(modelVisibleTools);
 
         // Filter by hasUi if requested
         if (hasUiParam === 'true') {

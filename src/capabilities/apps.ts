@@ -102,3 +102,32 @@ export async function getToolsWithUIInfo(client: Client): Promise<ToolWithUIInfo
     };
   });
 }
+
+/**
+ * Tool visibility targets (v0.4.1)
+ * - 'model': visible to LLM for AI-initiated tool calls
+ * - 'app': visible to apps for app-initiated tool calls via tools/call
+ */
+export type ToolVisibility = 'model' | 'app';
+
+/**
+ * Get the visibility settings for a tool.
+ * Tools can specify visibility in _meta.ui.visibility array.
+ * Default: visible to both model and app.
+ */
+export function getToolVisibility(tool: Tool): ToolVisibility[] {
+  const meta = tool._meta as { ui?: { visibility?: string[] } } | undefined;
+  const visibility = meta?.ui?.visibility;
+  if (Array.isArray(visibility) && visibility.length > 0) {
+    return visibility.filter((v): v is ToolVisibility => v === 'model' || v === 'app');
+  }
+  return ['model', 'app']; // default: visible to both
+}
+
+/**
+ * Check if a tool should be visible to the LLM/model.
+ * Tools with visibility: ["app"] are hidden from the model.
+ */
+export function isToolVisibleToModel(tool: Tool): boolean {
+  return getToolVisibility(tool).includes('model');
+}
