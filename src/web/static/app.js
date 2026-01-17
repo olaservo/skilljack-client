@@ -224,7 +224,7 @@ async function createNewPanel(key, serverName, uiResourceUri, toolInput, toolRes
   // Set up message bridge (returns cleanup function)
   const cleanup = setupAppBridge(iframe, uiResource, toolInput, toolResult);
 
-  // Store panel info
+  // Store panel info (including sendCancellation for v0.4.1)
   appPanels.set(key, {
     key,
     iframe,
@@ -233,6 +233,14 @@ async function createNewPanel(key, serverName, uiResourceUri, toolInput, toolRes
     toolName,
     uiResourceUri,
     cleanup,
+    // v0.4.1: Method to send tool cancellation notification
+    sendCancellation: (reason = 'User cancelled') => {
+      sendToApp(iframe, {
+        jsonrpc: '2.0',
+        method: 'ui/toolCancelled',
+        params: { reason },
+      });
+    },
   });
 
   // Create tab if in tabs mode
@@ -293,6 +301,28 @@ window.clearMcpApp = function() {
   }
 };
 
+// v0.4.1: Send tool cancellation notification to a specific app panel
+window.cancelMcpAppTool = function(serverName, uiResourceUri, reason = 'User cancelled') {
+  const key = `${serverName}__${uiResourceUri}`;
+  const panel = appPanels.get(key);
+  if (panel?.sendCancellation) {
+    panel.sendCancellation(reason);
+    console.log('[Host] Sent tool cancellation to:', key);
+    return true;
+  }
+  return false;
+};
+
+// v0.4.1: Send tool cancellation to all active app panels
+window.cancelAllMcpAppTools = function(reason = 'User cancelled') {
+  for (const panel of appPanels.values()) {
+    if (panel.sendCancellation) {
+      panel.sendCancellation(reason);
+    }
+  }
+  console.log('[Host] Sent tool cancellation to all panels');
+};
+
 function waitForSandboxReady(iframe) {
   return new Promise((resolve) => {
     const handler = (event) => {
@@ -308,6 +338,55 @@ function waitForSandboxReady(iframe) {
 
 function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
   let appInitialized = false;
+  let currentDisplayMode = 'inline';
+
+  // Extract tool name from uiResource for toolInfo
+  const toolName = uiResource.uri?.split('/').pop() || uiResource.serverName || 'unknown';
+
+  // Helper to get current theme (checks for dark mode preference or class)
+  function getCurrentTheme() {
+    if (document.documentElement.classList.contains('dark') ||
+        window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
+  }
+
+  // Helper to extract CSS variables from the document
+  function getCssVariables() {
+    const styles = getComputedStyle(document.documentElement);
+    const variables = {};
+    // Extract common theme variables
+    const varNames = [
+      '--primary-color', '--secondary-color', '--background', '--foreground',
+      '--text-color', '--border-color', '--accent-color', '--error-color',
+      '--success-color', '--warning-color', '--muted-color'
+    ];
+    for (const name of varNames) {
+      const value = styles.getPropertyValue(name).trim();
+      if (value) {
+        variables[name] = value;
+      }
+    }
+    return variables;
+  }
+
+  // Build enhanced host context (v0.4.1)
+  function buildHostContext() {
+    return {
+      theme: getCurrentTheme(),
+      locale: navigator.language,
+      toolInfo: {
+        name: toolName,
+        arguments: toolInput,
+      },
+      availableDisplayModes: ['inline', 'fullscreen'],
+      styles: {
+        variables: getCssVariables(),
+        css: {},
+      },
+    };
+  }
 
   const messageHandler = async (event) => {
     if (event.source !== iframe.contentWindow) return;
@@ -317,7 +396,7 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
 
     // Handle JSON-RPC messages from app
     if (data.jsonrpc === '2.0') {
-      // App sends ui/initialize request - HOST MUST RESPOND
+      // App sends ui/initialize request - HOST MUST RESPOND (v0.4.1 enhanced)
       if (data.method === 'ui/initialize' && data.id) {
         console.log('[Host] Received ui/initialize from app:', data.params);
         sendToApp(iframe, {
@@ -331,8 +410,9 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
             },
             hostInfo: {
               name: 'skilljack-web',
-              version: '0.1.0',
+              version: '0.2.0',
             },
+            hostContext: buildHostContext(),
           },
         });
       }
@@ -445,6 +525,59 @@ function setupAppBridge(iframe, uiResource, toolInput, toolResult) {
         if (panelContent && height && height > 0) {
           panelContent.style.minHeight = `${height}px`;
         }
+        sendToApp(iframe, {
+          jsonrpc: '2.0',
+          id: data.id,
+          result: {},
+        });
+      }
+
+      // v0.4.1: App requests display mode change (fullscreen, pip, inline)
+      if (data.method === 'ui/requestDisplayMode' && data.id) {
+        const { mode } = data.params;
+        console.log('[Host] Display mode requested:', mode);
+
+        const panel = iframe.closest('.app-panel');
+        if (panel) {
+          // Remove existing mode classes
+          panel.classList.remove('display-mode-fullscreen', 'display-mode-pip', 'display-mode-inline');
+
+          if (mode === 'fullscreen') {
+            panel.classList.add('display-mode-fullscreen');
+            currentDisplayMode = 'fullscreen';
+          } else if (mode === 'pip') {
+            // PiP not fully supported yet, fall back to inline
+            console.log('[Host] PiP mode not supported, using inline');
+            panel.classList.add('display-mode-inline');
+            currentDisplayMode = 'inline';
+          } else {
+            panel.classList.add('display-mode-inline');
+            currentDisplayMode = 'inline';
+          }
+        }
+
+        sendToApp(iframe, {
+          jsonrpc: '2.0',
+          id: data.id,
+          result: { mode: currentDisplayMode },
+        });
+      }
+
+      // v0.4.1: App updates model context
+      if (data.method === 'ui/modelContext' && data.id) {
+        const { content, structuredContent } = data.params;
+        console.log('[Host] Model context update:', { content, structuredContent });
+
+        // Store the model context for potential use in chat/LLM context
+        // This could be forwarded to the chat context manager in a full implementation
+        if (window.onModelContextUpdate) {
+          window.onModelContextUpdate({
+            toolName,
+            content,
+            structuredContent,
+          });
+        }
+
         sendToApp(iframe, {
           jsonrpc: '2.0',
           id: data.id,

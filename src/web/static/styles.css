@@ -367,3 +367,38 @@ header h1 {
   background: rgba(255, 107, 107, 0.1);
   border-radius: 4px;
 }
+
+/* ============ DISPLAY MODES (v0.4.1) ============ */
+
+/* Fullscreen display mode */
+.app-panel.display-mode-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  border-radius: 0;
+  border: none;
+  min-height: 100vh;
+  max-height: 100vh;
+}
+
+.app-panel.display-mode-fullscreen .panel-header {
+  background: var(--bg);
+  padding: 0.5rem 1rem;
+}
+
+.app-panel.display-mode-fullscreen .panel-close {
+  font-size: 1.5rem;
+}
+
+/* Inline display mode (default) */
+.app-panel.display-mode-inline {
+  /* Default styling - no special changes needed */
+}
+
+/* PiP display mode (picture-in-picture) - reserved for future */
+.app-panel.display-mode-pip {
+  /* PiP mode not fully supported yet, behaves like inline */
+}

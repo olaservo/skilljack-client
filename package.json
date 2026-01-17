@@ -1,6 +1,6 @@
 {
   "name": "mcp-skilljack-client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A full-capability MCP client demonstrating all advanced protocol features",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +28,7 @@
     "@ai-sdk/anthropic": "^3.0.9",
     "@ai-sdk/openai": "^3.0.0",
     "@anthropic-ai/sdk": "^0.71.0",
-    "@modelcontextprotocol/ext-apps": "^0.3.1",
+    "@modelcontextprotocol/ext-apps": "^0.4.1",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@radix-ui/react-collapsible": "^1.1.0",
     "@radix-ui/react-dialog": "^1.1.0",
