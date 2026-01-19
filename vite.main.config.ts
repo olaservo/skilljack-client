@@ -8,6 +8,11 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   build: {
+    // Output ESM format to match "type": "module" in package.json
+    lib: {
+      entry: 'src/electron/main/index.ts',
+      formats: ['es'],
+    },
     rollupOptions: {
       external: [
         'electron',
@@ -27,7 +32,25 @@ export default defineConfig({
         'node:util',
         'node:os',
         'node:crypto',
+        'node:module',
+        'node:process',
+        'node:readline',
+        // Also treat non-prefixed versions as external
+        'fs',
+        'path',
+        'child_process',
+        'http',
+        'https',
+        'stream',
+        'events',
+        'util',
+        'os',
+        'crypto',
+        'readline',
       ],
+      output: {
+        format: 'es',
+      },
     },
   },
   resolve: {

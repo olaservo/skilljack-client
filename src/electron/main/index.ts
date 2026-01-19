@@ -5,7 +5,7 @@
  * Handles IPC communication between renderer and MCP server management.
  */
 
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import * as path from 'node:path';
 import log from 'electron-log';
 import { setupIPCHandlers, cleanupIPCHandlers } from './ipc-handlers.js';
@@ -15,10 +15,8 @@ import { ServerManager } from './server-manager.js';
 log.transports.file.level = 'info';
 log.transports.console.level = 'debug';
 
-// Handle creating/removing shortcuts on Windows when installing/uninstalling.
-if (require('electron-squirrel-startup')) {
-  app.quit();
-}
+// Note: electron-squirrel-startup handling is done by Electron Forge
+// during Windows installation. Not needed in the main process code.
 
 // Keep a global reference of the window object to prevent garbage collection
 let mainWindow: BrowserWindow | null = null;
