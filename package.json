@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "A full-capability MCP client demonstrating all advanced protocol features",
   "type": "module",
-  "main": "dist/index.js",
+  "main": ".vite/build/main.js",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc && npm run build:chat",
@@ -14,7 +14,14 @@
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "electron:dev": "electron-forge start",
+    "electron:build": "electron-forge make",
+    "electron:package": "electron-forge package",
+    "electron:publish": "electron-forge publish"
+  },
+  "config": {
+    "forge": "./forge.config.ts"
   },
   "keywords": [
     "mcp",
@@ -38,16 +45,25 @@
     "@radix-ui/react-tooltip": "^1.1.0",
     "ai": "^6.0.27",
     "dotenv": "^16.4.0",
+    "electron-log": "^5.4.3",
+    "electron-store": "^11.0.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "ws": "^8.19.0"
   },
   "devDependencies": {
+    "@electron-forge/cli": "^7.11.1",
+    "@electron-forge/maker-deb": "^7.11.1",
+    "@electron-forge/maker-rpm": "^7.11.1",
+    "@electron-forge/maker-squirrel": "^7.11.1",
+    "@electron-forge/maker-zip": "^7.11.1",
+    "@electron-forge/plugin-vite": "^7.11.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.4.0",
+    "electron": "^39.2.7",
     "eslint": "^9.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.6.0",
