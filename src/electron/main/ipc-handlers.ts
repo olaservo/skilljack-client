@@ -294,10 +294,6 @@ async function handleChatStream(
   signal: AbortSignal
 ): Promise<void> {
   try {
-    // Debug: Check if API key is available
-    log.info('ANTHROPIC_API_KEY present:', !!process.env.ANTHROPIC_API_KEY);
-    log.info('Starting chat stream with settings:', JSON.stringify(request.settings));
-
     // Merge settings with defaults
     const settings = mergeSettings(request.settings);
 
@@ -320,22 +316,17 @@ async function handleChatStream(
       }));
 
     // Stream response using the existing provider
-    log.info('Creating chat stream...');
     const chatStream = streamChat({
       messages,
       mcpContext,
       settings,
       systemPrompt,
     });
-    log.info('Chat stream created, starting iteration...');
 
     // Iterate over the stream and forward events to renderer
     for await (const event of chatStream) {
-      log.info('Received stream event:', event.type);
-
       // Check if stream was cancelled
       if (signal.aborted) {
-        log.info(`Chat stream ${streamId} cancelled`);
         break;
       }
 
@@ -344,11 +335,9 @@ async function handleChatStream(
 
       // If we received a done event, we're finished
       if (event.type === 'done') {
-        log.info('Stream done');
         break;
       }
     }
-    log.info('Chat stream iteration complete');
 
     // Ensure done is sent if not aborted and not already sent
     if (!signal.aborted) {
@@ -369,9 +358,7 @@ function sendStreamEvent(
   streamId: string,
   event: StreamEvent
 ): void {
-  log.info('sendStreamEvent called:', streamId, event.type, 'window destroyed?', mainWindow.isDestroyed());
   if (!mainWindow.isDestroyed()) {
-    log.info('Sending to channel:', channels.CHAT_STREAM_EVENT);
     mainWindow.webContents.send(channels.CHAT_STREAM_EVENT, { streamId, event });
   }
 }

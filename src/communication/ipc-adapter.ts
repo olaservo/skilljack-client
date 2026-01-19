@@ -52,15 +52,12 @@ export function createIPCAdapter(electronAPI: ElectronAPI): CommunicationAdapter
   // Set up chat stream event listener once (singleton pattern)
   // Only register if not already registered to handle React StrictMode double-mount
   if (!chatStreamListenerRegistered) {
-    console.log('[IPC Adapter] Setting up chat stream event listener');
     chatStreamListenerRegistered = true;
     globalActiveStreams = activeStreams;
 
     electronAPI.onChatStreamEvent(({ streamId, event }) => {
-      console.log('[IPC Adapter] Received stream event:', streamId, event.type);
       const stream = globalActiveStreams?.get(streamId);
       if (!stream) {
-        console.warn('[IPC Adapter] No active stream found for:', streamId);
         return;
       }
 
@@ -79,7 +76,6 @@ export function createIPCAdapter(electronAPI: ElectronAPI): CommunicationAdapter
       }
     });
   } else {
-    console.log('[IPC Adapter] Chat stream listener already registered, updating streams reference');
     globalActiveStreams = activeStreams;
   }
 

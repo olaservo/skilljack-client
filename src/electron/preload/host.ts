@@ -131,9 +131,7 @@ const electronAPI = {
     callback: (event: { streamId: string; event: StreamEvent }) => void
   ): (() => void) => {
     validateOnChannel(channels.CHAT_STREAM_EVENT);
-    console.log('[Preload] Registering chat stream event listener for channel:', channels.CHAT_STREAM_EVENT);
     const handler = (_event: Electron.IpcRendererEvent, data: { streamId: string; event: StreamEvent }) => {
-      console.log('[Preload] Received chat stream event:', data.streamId, data.event?.type);
       callback(data);
     };
     ipcRenderer.on(channels.CHAT_STREAM_EVENT, handler);
@@ -232,15 +230,13 @@ const electronAPI = {
 type ChatStreamCallback = (data: { streamId: string; event: StreamEvent }) => void;
 const chatStreamCallbacks: ChatStreamCallback[] = [];
 
-// Register listener once at module load - this works!
+// Register listener once at module load
 ipcRenderer.on(channels.CHAT_STREAM_EVENT, (_event, data: { streamId: string; event: StreamEvent }) => {
-  console.log('[Preload] Chat stream event received:', data.streamId, data.event?.type);
-  // Forward to all registered callbacks
   for (const callback of chatStreamCallbacks) {
     try {
       callback(data);
     } catch (err) {
-      console.error('[Preload] Callback error:', err);
+      // Silently ignore callback errors
     }
   }
 });
@@ -253,13 +249,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ...electronAPI,
   // Override onChatStreamEvent to use the pre-registered listener
   onChatStreamEvent: (callback: ChatStreamCallback): (() => void) => {
-    console.log('[Preload] Adding chat stream callback');
     chatStreamCallbacks.push(callback);
     return () => {
       const idx = chatStreamCallbacks.indexOf(callback);
       if (idx >= 0) {
         chatStreamCallbacks.splice(idx, 1);
-        console.log('[Preload] Removed chat stream callback');
       }
     };
   },

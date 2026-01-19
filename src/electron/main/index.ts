@@ -43,7 +43,7 @@ const createWindow = async (): Promise<void> => {
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,     // Required for security
-      sandbox: false,             // Disabled temporarily for debugging IPC issue
+      sandbox: true,              // Required for security
       nodeIntegration: false,     // Required for security
       webSecurity: true,
     },
