@@ -8,9 +8,12 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import log from 'electron-log';
 import Store from 'electron-store';
+import type { ModelMessage } from 'ai';
 import * as channels from '../../shared/channels.js';
+import { streamChat, mergeSettings } from '../../web/llm/provider.js';
+import { buildSystemPrompt } from '../../web/llm/system-prompt.js';
 import type { ServerManager } from './server-manager.js';
-import type { ChatRequest, StreamEvent } from '../../shared/types.js';
+import type { ChatRequest, StreamEvent, McpContext } from '../../shared/types.js';
 
 // Settings store for renderer preferences
 const settingsStore = new Store({
@@ -287,41 +290,76 @@ async function handleChatStream(
   streamId: string,
   request: ChatRequest,
   mainWindow: BrowserWindow,
-  serverManager: ServerManager,
+  _serverManager: ServerManager,
   signal: AbortSignal
 ): Promise<void> {
-  // Note: In a full implementation, this would use the LLM API
-  // For now, we'll use a fetch to an external API or implement locally
-
-  // For Electron, we need to handle chat differently since we're not running
-  // through the web server. We'll need to call the LLM API directly here.
-
-  // Import the LLM handler (we'll need to adapt this for Electron)
   try {
-    const { streamChat } = await import('../../web/llm/routes.js');
+    // Debug: Check if API key is available
+    log.info('ANTHROPIC_API_KEY present:', !!process.env.ANTHROPIC_API_KEY);
+    log.info('Starting chat stream with settings:', JSON.stringify(request.settings));
 
-    // The streamChat function expects a request/response, so we need to adapt
-    // For now, send a placeholder that indicates Electron chat needs implementation
-    sendStreamEvent(mainWindow, streamId, {
-      type: 'text',
-      content: 'Chat streaming in Electron mode requires LLM API integration. ',
-    });
+    // Merge settings with defaults
+    const settings = mergeSettings(request.settings);
 
-    sendStreamEvent(mainWindow, streamId, {
-      type: 'text',
-      content: 'Please configure your API keys in settings and ensure the LLM service is available.',
-    });
+    // Build MCP context for system prompt
+    const mcpContext: McpContext = request.mcpContext || {
+      servers: [],
+      availableTools: [],
+    };
 
-    sendStreamEvent(mainWindow, streamId, {
-      type: 'done',
+    // Build system prompt with MCP context
+    const systemPrompt = buildSystemPrompt(mcpContext, settings.systemPrompt);
+
+    // Convert messages to AI SDK format
+    // Filter out empty messages and map to ModelMessage format
+    const messages: ModelMessage[] = request.messages
+      .filter((m) => m.content.trim() !== '')
+      .map((m) => ({
+        role: m.role as 'user' | 'assistant' | 'system',
+        content: m.content,
+      }));
+
+    // Stream response using the existing provider
+    log.info('Creating chat stream...');
+    const chatStream = streamChat({
+      messages,
+      mcpContext,
+      settings,
+      systemPrompt,
     });
+    log.info('Chat stream created, starting iteration...');
+
+    // Iterate over the stream and forward events to renderer
+    for await (const event of chatStream) {
+      log.info('Received stream event:', event.type);
+
+      // Check if stream was cancelled
+      if (signal.aborted) {
+        log.info(`Chat stream ${streamId} cancelled`);
+        break;
+      }
+
+      // Forward the event to the renderer
+      sendStreamEvent(mainWindow, streamId, event);
+
+      // If we received a done event, we're finished
+      if (event.type === 'done') {
+        log.info('Stream done');
+        break;
+      }
+    }
+    log.info('Chat stream iteration complete');
+
+    // Ensure done is sent if not aborted and not already sent
+    if (!signal.aborted) {
+      // The stream may have already sent 'done', but sending again is harmless
+      // The renderer should handle duplicate done events gracefully
+    }
   } catch (error) {
-    log.error('Failed to import LLM module:', error);
-
-    // Fallback: indicate that chat needs setup
+    log.error('Chat stream error:', error);
     sendStreamEvent(mainWindow, streamId, {
       type: 'error',
-      message: 'Chat functionality requires additional configuration for Electron mode.',
+      message: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 }
@@ -331,7 +369,9 @@ function sendStreamEvent(
   streamId: string,
   event: StreamEvent
 ): void {
+  log.info('sendStreamEvent called:', streamId, event.type, 'window destroyed?', mainWindow.isDestroyed());
   if (!mainWindow.isDestroyed()) {
+    log.info('Sending to channel:', channels.CHAT_STREAM_EVENT);
     mainWindow.webContents.send(channels.CHAT_STREAM_EVENT, { streamId, event });
   }
 }

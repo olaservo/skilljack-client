@@ -43,15 +43,11 @@ export function useCommunication(): CommunicationAdapter {
     return adapterRef.current;
   }, []);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (adapterRef.current) {
-        adapterRef.current.dispose();
-        adapterRef.current = null;
-      }
-    };
-  }, []);
+  // NOTE: We intentionally do NOT dispose the adapter on unmount.
+  // In Electron mode, the adapter is a singleton that should persist
+  // for the app lifetime. React StrictMode's double-mount would
+  // otherwise cause the chat stream callbacks to be lost.
+  // The adapter will be cleaned up when the window closes.
 
   return adapter;
 }

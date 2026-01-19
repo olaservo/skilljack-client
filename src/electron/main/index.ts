@@ -5,6 +5,9 @@
  * Handles IPC communication between renderer and MCP server management.
  */
 
+// Load environment variables from .env file
+import 'dotenv/config';
+
 import { app, BrowserWindow } from 'electron';
 import * as path from 'node:path';
 import log from 'electron-log';
@@ -38,9 +41,9 @@ const createWindow = async (): Promise<void> => {
     minWidth: 800,
     minHeight: 600,
     webPreferences: {
-      preload: path.join(__dirname, '../preload/host.js'),
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,     // Required for security
-      sandbox: true,              // Required for security
+      sandbox: false,             // Disabled temporarily for debugging IPC issue
       nodeIntegration: false,     // Required for security
       webSecurity: true,
     },

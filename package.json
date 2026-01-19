@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "description": "A full-capability MCP client demonstrating all advanced protocol features",
   "type": "module",
-  "main": ".vite/build/main.js",
+  "main": ".vite/build/main.cjs",
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc && npm run build:chat",

@@ -24,6 +24,19 @@ import type {
   ServerWithState,
 } from '../shared/types.js';
 
+// Module-level singleton state for chat stream listener
+let chatStreamListenerRegistered = false;
+
+// Default no-op resolve function used to detect when no one is waiting
+const defaultResolve = (_value: IteratorResult<StreamEvent>) => {};
+
+let globalActiveStreams: Map<string, {
+  resolve: (value: IteratorResult<StreamEvent>) => void;
+  defaultResolve: (value: IteratorResult<StreamEvent>) => void;
+  events: StreamEvent[];
+  done: boolean;
+}> | null = null;
+
 export function createIPCAdapter(electronAPI: ElectronAPI): CommunicationAdapter {
   // Track event listener cleanup functions
   const cleanupFns: Array<() => void> = [];
@@ -31,25 +44,44 @@ export function createIPCAdapter(electronAPI: ElectronAPI): CommunicationAdapter
   // Track active chat streams
   const activeStreams = new Map<string, {
     resolve: (value: IteratorResult<StreamEvent>) => void;
+    defaultResolve: (value: IteratorResult<StreamEvent>) => void;
     events: StreamEvent[];
     done: boolean;
   }>();
 
-  // Set up chat stream event listener once
-  const chatStreamCleanup = electronAPI.onChatStreamEvent(({ streamId, event }) => {
-    const stream = activeStreams.get(streamId);
-    if (!stream) return;
+  // Set up chat stream event listener once (singleton pattern)
+  // Only register if not already registered to handle React StrictMode double-mount
+  if (!chatStreamListenerRegistered) {
+    console.log('[IPC Adapter] Setting up chat stream event listener');
+    chatStreamListenerRegistered = true;
+    globalActiveStreams = activeStreams;
 
-    if (event.type === 'done' || event.type === 'error') {
-      stream.events.push(event);
-      stream.done = true;
-      stream.resolve({ value: event, done: false });
-    } else {
-      stream.events.push(event);
-      stream.resolve({ value: event, done: false });
-    }
-  });
-  cleanupFns.push(chatStreamCleanup);
+    electronAPI.onChatStreamEvent(({ streamId, event }) => {
+      console.log('[IPC Adapter] Received stream event:', streamId, event.type);
+      const stream = globalActiveStreams?.get(streamId);
+      if (!stream) {
+        console.warn('[IPC Adapter] No active stream found for:', streamId);
+        return;
+      }
+
+      if (event.type === 'done' || event.type === 'error') {
+        stream.done = true;
+      }
+
+      // If someone is waiting (resolve is set), resolve immediately
+      // Otherwise buffer the event for later consumption
+      if (stream.resolve !== stream.defaultResolve) {
+        const resolveRef = stream.resolve;
+        stream.resolve = stream.defaultResolve;
+        resolveRef({ value: event, done: false });
+      } else {
+        stream.events.push(event);
+      }
+    });
+  } else {
+    console.log('[IPC Adapter] Chat stream listener already registered, updating streams reference');
+    globalActiveStreams = activeStreams;
+  }
 
   return {
     // ============================================
@@ -142,24 +174,36 @@ export function createIPCAdapter(electronAPI: ElectronAPI): CommunicationAdapter
 
       // Create stream state
       const streamState = {
-        resolve: (_value: IteratorResult<StreamEvent>) => {},
+        resolve: defaultResolve,
+        defaultResolve: defaultResolve,
         events: [] as StreamEvent[],
         done: false,
       };
       activeStreams.set(streamId, streamState);
 
       try {
-        while (!streamState.done) {
+        while (true) {
+          // Check if we have buffered events first
+          if (streamState.events.length > 0) {
+            const event = streamState.events.shift()!;
+            yield event;
+            if (event.type === 'done' || event.type === 'error') {
+              break;
+            }
+            continue;
+          }
+
+          // If stream is done and no buffered events, we're finished
+          if (streamState.done) {
+            break;
+          }
+
           // Wait for next event
           const event = await new Promise<StreamEvent>((resolve) => {
-            // Check if we have buffered events
-            if (streamState.events.length > 0) {
-              resolve(streamState.events.shift()!);
-              return;
-            }
-
-            // Wait for next event
-            streamState.resolve = (result) => resolve(result.value);
+            streamState.resolve = (result) => {
+              streamState.resolve = defaultResolve;
+              resolve(result.value);
+            };
           });
 
           yield event;
