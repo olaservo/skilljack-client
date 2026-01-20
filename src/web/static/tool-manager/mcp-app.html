@@ -379,10 +379,16 @@
     let tools = [];
     let servers = [];
     let serverNames = new Set();
+    let useJsonRpc = false; // Will be set to true if running in iframe (Electron mode)
+    let rpcRequestId = 1;
+    const pendingRequests = new Map();
 
     // Get host origin (injected by host, or fallback to referrer/location)
     const hostOrigin = window.__HOST_ORIGIN__
       || (document.referrer ? new URL(document.referrer).origin : window.location.origin);
+
+    // Detect if we're in an iframe (Electron mode uses sandboxed iframes)
+    const isInIframe = window.parent !== window;
 
     // Elements
     const serverList = document.getElementById('server-list');
@@ -391,36 +397,107 @@
     const searchInput = document.getElementById('search');
     const serverFilter = document.getElementById('server-filter');
 
+    // ============================================
+    // JSON-RPC Communication (for Electron mode)
+    // ============================================
+
+    // Send JSON-RPC request to host
+    function sendRpcRequest(method, params = {}) {
+      return new Promise((resolve, reject) => {
+        const id = rpcRequestId++;
+        pendingRequests.set(id, { resolve, reject });
+
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          id,
+          method,
+          params
+        }, '*');
+
+        // Timeout after 10 seconds
+        setTimeout(() => {
+          if (pendingRequests.has(id)) {
+            pendingRequests.delete(id);
+            reject(new Error('Request timeout'));
+          }
+        }, 10000);
+      });
+    }
+
+    // Handle JSON-RPC responses from host
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+      if (!data || typeof data !== 'object' || data.jsonrpc !== '2.0') return;
+
+      // Handle response (has id and result/error)
+      if (data.id && pendingRequests.has(data.id)) {
+        const { resolve, reject } = pendingRequests.get(data.id);
+        pendingRequests.delete(data.id);
+
+        if (data.error) {
+          reject(new Error(data.error.message || 'RPC error'));
+        } else {
+          resolve(data.result);
+        }
+      }
+    });
+
     // Toggle section collapse
     function toggleSection(sectionId) {
       const section = document.getElementById(sectionId);
       section.classList.toggle('collapsed');
     }
 
-    // Fetch servers from API
+    // ============================================
+    // Data Fetching (HTTP or JSON-RPC)
+    // ============================================
+
+    // Fetch servers
     async function fetchServers() {
       try {
-        const res = await fetch(`${hostOrigin}/api/tool-manager/servers`);
-        if (!res.ok) throw new Error('Failed to fetch servers');
-        const data = await res.json();
+        let data;
+        if (useJsonRpc) {
+          data = await sendRpcRequest('tool-manager/getServers');
+        } else {
+          const res = await fetch(`${hostOrigin}/api/tool-manager/servers`);
+          if (!res.ok) throw new Error('Failed to fetch servers');
+          data = await res.json();
+        }
         servers = data.servers || [];
         renderServers();
       } catch (err) {
+        // If HTTP fails and we're in iframe, switch to JSON-RPC mode
+        if (!useJsonRpc && isInIframe) {
+          console.log('[ToolManager] HTTP failed, switching to JSON-RPC mode');
+          useJsonRpc = true;
+          return fetchServers();
+        }
         serverList.innerHTML = `<div class="error">Failed to load servers: ${err.message}</div>`;
       }
     }
 
-    // Fetch tools from API
+    // Fetch tools
     async function fetchTools() {
       try {
-        const res = await fetch(`${hostOrigin}/api/tool-manager/tools`);
-        if (!res.ok) throw new Error('Failed to fetch tools');
-        const data = await res.json();
+        let data;
+        if (useJsonRpc) {
+          data = await sendRpcRequest('tool-manager/getTools');
+        } else {
+          const res = await fetch(`${hostOrigin}/api/tool-manager/tools`);
+          if (!res.ok) throw new Error('Failed to fetch tools');
+          data = await res.json();
+        }
         tools = data.tools || [];
         serverNames = new Set(tools.map(t => t.serverName));
         updateServerFilter();
         renderTools();
       } catch (err) {
+        // If HTTP fails and we're in iframe, switch to JSON-RPC mode
+        if (!useJsonRpc && isInIframe) {
+          console.log('[ToolManager] HTTP failed, switching to JSON-RPC mode');
+          useJsonRpc = true;
+          return fetchTools();
+        }
         toolList.innerHTML = `<div class="error">Failed to load tools: ${err.message}</div>`;
       }
     }
@@ -441,12 +518,16 @@
     // Toggle server enabled state
     async function toggleServer(name, enabled) {
       try {
-        const res = await fetch(`${hostOrigin}/api/tool-manager/servers/${encodeURIComponent(name)}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled }),
-        });
-        if (!res.ok) throw new Error('Failed to update server');
+        if (useJsonRpc) {
+          await sendRpcRequest('tool-manager/setServerEnabled', { name, enabled });
+        } else {
+          const res = await fetch(`${hostOrigin}/api/tool-manager/servers/${encodeURIComponent(name)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled }),
+          });
+          if (!res.ok) throw new Error('Failed to update server');
+        }
 
         // Refresh both servers and tools (tools' enabled state depends on server)
         await Promise.all([fetchServers(), fetchTools()]);
@@ -460,12 +541,16 @@
     // Toggle tool enabled state
     async function toggleTool(name, enabled) {
       try {
-        const res = await fetch(`${hostOrigin}/api/tool-manager/tools/${encodeURIComponent(name)}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled }),
-        });
-        if (!res.ok) throw new Error('Failed to update tool');
+        if (useJsonRpc) {
+          await sendRpcRequest('tool-manager/setToolEnabled', { name, enabled });
+        } else {
+          const res = await fetch(`${hostOrigin}/api/tool-manager/tools/${encodeURIComponent(name)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled }),
+          });
+          if (!res.ok) throw new Error('Failed to update tool');
+        }
 
         // Update local state
         const tool = tools.find(t => t.name === name);
@@ -568,6 +653,11 @@
     document.getElementById('ui-only').addEventListener('change', renderTools);
 
     // Initial load
+    // If in iframe, start with JSON-RPC mode to avoid HTTP timeout
+    if (isInIframe) {
+      console.log('[ToolManager] Running in iframe, using JSON-RPC mode');
+      useJsonRpc = true;
+    }
     Promise.all([fetchServers(), fetchTools()]);
   </script>
 </body>

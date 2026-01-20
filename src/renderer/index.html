@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline' blob:; frame-src 'self' blob: data:;">
+  <title>Skilljack Client</title>
+  <link rel="stylesheet" href="./chat/main.css" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body, #root {
+      height: 100%;
+      width: 100%;
+      background: var(--bg-primary, #1a1a2e);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="./App.tsx"></script>
+</body>
+</html>

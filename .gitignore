@@ -26,3 +26,8 @@ Thumbs.db
 
 # Build artifacts
 src/web/static/chat/bundle.*
+.vite/
+
+# Documentation (local only)
+docs/architecture-plan.md
+docs/electron-esm-cjs-fix.md
