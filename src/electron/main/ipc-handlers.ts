@@ -12,7 +12,7 @@ import type { ModelMessage } from 'ai';
 import * as channels from '../../shared/channels.js';
 import { streamChat, mergeSettings } from '../../web/llm/provider.js';
 import { buildSystemPrompt } from '../../web/llm/system-prompt.js';
-import type { ServerManager } from './server-manager.js';
+import type { McpManager } from './mcp-manager.js';
 import type { ChatRequest, StreamEvent, McpContext } from '../../shared/types.js';
 
 // Settings store for renderer preferences
@@ -39,11 +39,11 @@ const activeStreams = new Map<string, AbortController>();
 let streamIdCounter = 0;
 
 let registeredWindow: BrowserWindow | null = null;
-let registeredServerManager: ServerManager | null = null;
+let registeredServerManager: McpManager | null = null;
 
 export function setupIPCHandlers(
   mainWindow: BrowserWindow,
-  serverManager: ServerManager
+  serverManager: McpManager
 ): void {
   registeredWindow = mainWindow;
   registeredServerManager = serverManager;
@@ -258,6 +258,47 @@ export function setupIPCHandlers(
     mainWindow.close();
   });
 
+  // ============================================
+  // Lifecycle Management
+  // ============================================
+
+  ipcMain.handle(channels.GET_SERVER_LIFECYCLE_STATES, async () => {
+    try {
+      const states = serverManager.getAllServerStates();
+      return { states };
+    } catch (error) {
+      log.error('GET_SERVER_LIFECYCLE_STATES error:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle(channels.RESTART_SERVER, async (_event, name: string) => {
+    try {
+      await serverManager.restartServer(name);
+    } catch (error) {
+      log.error('RESTART_SERVER error:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle(channels.STOP_SERVER, async (_event, name: string) => {
+    try {
+      await serverManager.stopServer(name);
+    } catch (error) {
+      log.error('STOP_SERVER error:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle(channels.START_SERVER, async (_event, name: string) => {
+    try {
+      await serverManager.startServer(name);
+    } catch (error) {
+      log.error('START_SERVER error:', error);
+      throw error;
+    }
+  });
+
   log.info('IPC handlers registered');
 }
 
@@ -290,7 +331,7 @@ async function handleChatStream(
   streamId: string,
   request: ChatRequest,
   mainWindow: BrowserWindow,
-  _serverManager: ServerManager,
+  _serverManager: McpManager,
   signal: AbortSignal
 ): Promise<void> {
   try {

@@ -6,6 +6,56 @@
  */
 
 // ============================================
+// Lifecycle Types (re-exported from mcp-server-manager)
+// ============================================
+
+export type {
+  ServerStatus,
+  ServerStateSummary,
+  HealthCheckResult,
+} from '@skilljack/mcp-server-manager';
+
+// ============================================
+// Lifecycle Event Payloads (for IPC)
+// ============================================
+
+export interface ServerStatusChangedPayload {
+  serverName: string;
+  previousStatus: import('@skilljack/mcp-server-manager').ServerStatus;
+  newStatus: import('@skilljack/mcp-server-manager').ServerStatus;
+  timestamp: string;
+}
+
+export interface ServerHealthPayload {
+  serverName: string;
+  healthy: boolean;
+  latencyMs?: number;
+  error?: string;
+  timestamp: string;
+}
+
+export interface ServerCrashedPayload {
+  serverName: string;
+  exitCode: number | null;
+  signal: string | null;
+  willRestart: boolean;
+  timestamp: string;
+}
+
+export interface ServerRestartingPayload {
+  serverName: string;
+  attempt: number;
+  maxAttempts: number;
+  reason: 'crashed' | 'unhealthy' | 'manual';
+  timestamp: string;
+}
+
+export interface ManagerReadyPayload {
+  serverCount: number;
+  timestamp: string;
+}
+
+// ============================================
 // Server Types
 // ============================================
 
@@ -19,8 +69,11 @@ export interface ServerInfo {
 export interface ServerSummary {
   name: string;
   version?: string;
-  status: 'connected' | 'connecting' | 'error';
+  status: import('@skilljack/mcp-server-manager').ServerStatus;
   toolCount: number;
+  healthy?: boolean;
+  restartAttempts?: number;
+  error?: string;
 }
 
 // ============================================
@@ -172,7 +225,14 @@ export type WebSocketEvent =
   | { type: 'tools_changed' }
   | { type: 'servers_changed' }
   | { type: 'resource_updated'; uri: string; serverName: string }
-  | { type: 'connection_error'; serverName: string; error: string };
+  | { type: 'connection_error'; serverName: string; error: string }
+  // Lifecycle events
+  | { type: 'server_status_changed'; payload: ServerStatusChangedPayload }
+  | { type: 'server_healthy'; payload: ServerHealthPayload }
+  | { type: 'server_unhealthy'; payload: ServerHealthPayload }
+  | { type: 'server_crashed'; payload: ServerCrashedPayload }
+  | { type: 'server_restarting'; payload: ServerRestartingPayload }
+  | { type: 'manager_ready'; payload: ManagerReadyPayload };
 
 // ============================================
 // Config Types

@@ -1,8 +1,12 @@
 /**
- * Electron Server Manager
+ * MCP Manager
  *
- * Wraps multi-server.ts functionality for the Electron main process.
- * Manages MCP client connections and provides methods for IPC handlers.
+ * Orchestrates three independent modules:
+ * 1. @skilljack/mcp-server-manager - Lifecycle management (connect, health, restart)
+ * 2. multi-server.ts - Tool/resource aggregation
+ * 3. ToolManagerState - Enabled/disabled persistence (electron-store)
+ *
+ * This wrapper is intentionally thin (~150 lines of orchestration).
  */
 
 import { app, BrowserWindow } from 'electron';
@@ -11,22 +15,27 @@ import log from 'electron-log';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
+import {
+  ServerManager as LifecycleManager,
+  type ServerStateSummary,
+  type LifecycleEvent,
+  type ManagerEvent,
+  ConsoleLoggerFactory,
+} from '@skilljack/mcp-server-manager';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import {
   loadMultiServerConfig,
-  connectToAllServers,
-  disconnectAll,
   aggregateTools,
   aggregatePrompts,
   aggregateResources,
   callTool,
-  readResource,
   getServersSummary,
   setupAllCapabilities,
-  type MultiServerConfig,
   type AggregatedTool,
 } from '../../multi-server.js';
 import { getToolUiResourceUri, fetchUIResource, isToolVisibleToModel } from '../../capabilities/apps.js';
+import { convertLegacyConfig } from './config-adapter.js';
+import * as channels from '../../shared/channels.js';
 import type {
   ServerSummary,
   ToolWithUIInfo,
@@ -57,7 +66,7 @@ const store = new Store<StoreSchema>({
 });
 
 // ============================================
-// Tool Manager State
+// Tool Manager State (independent module)
 // ============================================
 
 class ToolManagerState {
@@ -140,11 +149,11 @@ const TOOL_MANAGER_TOOL: ToolWithUIInfo = {
 };
 
 // ============================================
-// Server Manager Class
+// MCP Manager Class
 // ============================================
 
-export class ServerManager {
-  private clients = new Map<string, Client>();
+export class McpManager {
+  private lifecycleManager: LifecycleManager | null = null;
   private toolState = new ToolManagerState();
   private mainWindow: BrowserWindow | null = null;
 
@@ -176,42 +185,100 @@ export class ServerManager {
   }
 
   async loadConfig(path: string): Promise<void> {
-    const config = await loadMultiServerConfig(path);
-    await this.connectServers(config);
+    // Load legacy config and convert to new format
+    const legacyConfig = await loadMultiServerConfig(path);
+    const managerConfig = convertLegacyConfig(legacyConfig);
+
+    // Shutdown existing manager if any
+    if (this.lifecycleManager) {
+      await this.lifecycleManager.shutdown();
+    }
+
+    // Create new lifecycle manager
+    this.lifecycleManager = LifecycleManager.fromConfig(managerConfig, {
+      loggerFactory: new ConsoleLoggerFactory(),
+    });
+
+    // Wire up lifecycle events to IPC
+    this.setupEventBridge();
+
+    // Start all servers
+    await this.lifecycleManager.start();
+
+    // Setup MCP capabilities on connected clients
+    const clients = this.lifecycleManager.getConnectedClients();
+    this.setupCapabilities(clients);
+
     store.set('configPath', path);
   }
 
-  async connectServers(config: MultiServerConfig): Promise<void> {
-    // Disconnect existing clients
-    if (this.clients.size > 0) {
-      await disconnectAll(this.clients);
-    }
+  private setupEventBridge(): void {
+    if (!this.lifecycleManager) return;
 
-    // Connect to all servers
-    this.clients = await connectToAllServers(config, {
-      continueOnError: true,
-      onConnect: (name, _client) => {
-        log.info(`Connected to MCP server: ${name}`);
-        this.notifyServersChanged();
-      },
-      onError: (name, error) => {
-        log.error(`Failed to connect to ${name}:`, error.message);
-        this.notifyConnectionError(name, error.message);
-      },
+    // Forward all lifecycle events to renderer
+    this.lifecycleManager.onAnyLifecycleEvent((event: LifecycleEvent) => {
+      const payload = {
+        ...event,
+        timestamp: event.timestamp.toISOString(),
+      };
+
+      // Send to appropriate channel based on event type
+      switch (event.type) {
+        case 'server:status-changed':
+          this.sendToRenderer(channels.ON_SERVER_STATUS_CHANGED, payload);
+          // Also trigger servers changed for backward compatibility
+          this.sendToRenderer(channels.ON_SERVERS_CHANGED, undefined);
+          break;
+        case 'server:healthy':
+          this.sendToRenderer(channels.ON_SERVER_HEALTHY, payload);
+          break;
+        case 'server:unhealthy':
+          this.sendToRenderer(channels.ON_SERVER_UNHEALTHY, payload);
+          break;
+        case 'server:crashed':
+          this.sendToRenderer(channels.ON_SERVER_CRASHED, payload);
+          break;
+        case 'server:restarting':
+          this.sendToRenderer(channels.ON_SERVER_RESTARTING, payload);
+          break;
+        case 'server:connected':
+          this.sendToRenderer(channels.ON_SERVERS_CHANGED, undefined);
+          // Re-setup capabilities when a server reconnects
+          const clients = this.lifecycleManager?.getConnectedClients();
+          if (clients) this.setupCapabilities(clients);
+          break;
+        case 'server:connection-failed':
+          this.sendToRenderer(channels.ON_CONNECTION_ERROR, {
+            serverName: event.serverName,
+            error: event.error,
+          });
+          break;
+      }
     });
 
-    // Set up capabilities
-    setupAllCapabilities(this.clients, {
+    // Forward manager events
+    this.lifecycleManager.onManagerEvent('manager:ready', (event: ManagerEvent) => {
+      if (event.type === 'manager:ready') {
+        this.sendToRenderer(channels.ON_MANAGER_READY, {
+          serverCount: event.serverCount,
+          timestamp: event.timestamp.toISOString(),
+        });
+      }
+    });
+  }
+
+  private setupCapabilities(clients: Map<string, Client>): void {
+    setupAllCapabilities(clients, {
       listChanged: {
         onToolsChanged: (_serverName, _tools) => {
           this.notifyToolsChanged();
         },
         onResourcesChanged: (_serverName, _resources) => {
-          this.notifyServersChanged();
+          this.sendToRenderer(channels.ON_SERVERS_CHANGED, undefined);
         },
       },
       onResourceUpdated: (serverName, uri) => {
-        this.notifyResourceUpdated(serverName, uri);
+        this.sendToRenderer(channels.ON_RESOURCE_UPDATED, { serverName, uri });
       },
       onLogMessage: (serverName, level, logger, data) => {
         log.info(`[${serverName}][${level}] ${logger}:`, data);
@@ -220,8 +287,30 @@ export class ServerManager {
   }
 
   async shutdown(): Promise<void> {
-    await disconnectAll(this.clients);
-    this.clients.clear();
+    if (this.lifecycleManager) {
+      await this.lifecycleManager.shutdown();
+      this.lifecycleManager = null;
+    }
+  }
+
+  // ============================================
+  // Lifecycle Management
+  // ============================================
+
+  getAllServerStates(): ServerStateSummary[] {
+    return this.lifecycleManager?.getAllServerStates() ?? [];
+  }
+
+  async restartServer(name: string): Promise<void> {
+    await this.lifecycleManager?.restartServer(name);
+  }
+
+  async stopServer(name: string): Promise<void> {
+    await this.lifecycleManager?.stopServer(name);
+  }
+
+  async startServer(name: string): Promise<void> {
+    await this.lifecycleManager?.startServer(name);
   }
 
   // ============================================
@@ -229,28 +318,40 @@ export class ServerManager {
   // ============================================
 
   async getServers(): Promise<ServerSummary[]> {
-    const summary = await getServersSummary(this.clients);
-    return summary.map((s) => ({
-      name: s.name,
-      version: s.serverVersion?.name,
-      toolCount: s.toolCount,
-    }));
+    const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
+    const summary = await getServersSummary(clients);
+    const states = this.lifecycleManager?.getAllServerStates() ?? [];
+
+    return summary.map((s) => {
+      const state = states.find((st) => st.name === s.name);
+      return {
+        name: s.name,
+        version: s.serverVersion?.name,
+        status: state?.status ?? 'disconnected',
+        toolCount: s.toolCount,
+        healthy: state?.healthy,
+        restartAttempts: state?.restartAttempts,
+        error: state?.error,
+      };
+    });
   }
 
   getConfig(): WebConfig {
+    const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
     return {
       sandboxPort: 0, // Not used in Electron mode
       multiServer: true,
-      serverCount: this.clients.size,
+      serverCount: clients.size,
     };
   }
 
   // ============================================
-  // Tools
+  // Tools (uses multi-server.ts aggregation)
   // ============================================
 
   async getTools(options?: { hasUi?: boolean }): Promise<ToolWithUIInfo[]> {
-    const allTools = await aggregateTools(this.clients);
+    const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
+    const allTools = await aggregateTools(clients);
     const modelVisibleTools = allTools.filter((t) => isToolVisibleToModel(t));
     let toolsWithUI = this.toolsToUIInfo(modelVisibleTools);
 
@@ -271,10 +372,15 @@ export class ServerManager {
       };
     }
 
-    const { serverName, result } = await callTool(this.clients, name, args, {
+    const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
+    const { serverName, result } = await callTool(clients, name, args, {
       timeout: 120000,
     });
-    return { ...result, serverName };
+    return {
+      content: result.content,
+      isError: result.isError === true,
+      serverName,
+    };
   }
 
   // ============================================
@@ -282,7 +388,8 @@ export class ServerManager {
   // ============================================
 
   async getToolManagerTools(options?: { hasUi?: boolean }): Promise<ToolWithEnabledState[]> {
-    const allTools = await aggregateTools(this.clients);
+    const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
+    const allTools = await aggregateTools(clients);
     let toolsWithUI = this.toolsToUIInfo(allTools);
 
     if (options?.hasUi) {
@@ -299,7 +406,8 @@ export class ServerManager {
   }
 
   async getToolManagerServers(): Promise<ServerWithState[]> {
-    const allTools = await aggregateTools(this.clients);
+    const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
+    const allTools = await aggregateTools(clients);
     const toolsWithUI = this.toolsToUIInfo(allTools);
     return this.toolState.getServersWithState(toolsWithUI);
   }
@@ -315,7 +423,8 @@ export class ServerManager {
   // ============================================
 
   async getResources(): Promise<ResourceInfo[]> {
-    const resources = await aggregateResources(this.clients);
+    const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
+    const resources = await aggregateResources(clients);
     return resources.map((r) => ({
       uri: r.uri,
       name: r.name,
@@ -326,7 +435,8 @@ export class ServerManager {
   }
 
   async readResource(serverName: string, uri: string): Promise<unknown> {
-    const client = this.clients.get(serverName);
+    const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
+    const client = clients.get(serverName);
     if (!client) {
       throw new Error(`Server not found: ${serverName}`);
     }
@@ -351,14 +461,20 @@ export class ServerManager {
       }
     }
 
-    const client = this.clients.get(serverName);
+    const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
+    const client = clients.get(serverName);
     if (!client) {
       return null;
     }
 
     const resource = await fetchUIResource(client, uri);
     if (resource) {
-      return { ...resource, serverName };
+      return {
+        uri,
+        mimeType: 'text/html;mcp-app',
+        text: resource.html,
+        serverName,
+      };
     }
     return null;
   }
@@ -368,7 +484,8 @@ export class ServerManager {
   // ============================================
 
   async getPrompts(): Promise<PromptInfo[]> {
-    const prompts = await aggregatePrompts(this.clients);
+    const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
+    const prompts = await aggregatePrompts(clients);
     return prompts.map((p) => ({
       name: p.name,
       description: p.description,
@@ -396,30 +513,16 @@ export class ServerManager {
   }
 
   // ============================================
-  // Event Notifications
+  // IPC Notification Helpers
   // ============================================
 
+  private sendToRenderer(channel: string, data: unknown): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send(channel, data);
+    }
+  }
+
   private notifyToolsChanged(): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send('mcp:on-tools-changed');
-    }
-  }
-
-  private notifyServersChanged(): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send('mcp:on-servers-changed');
-    }
-  }
-
-  private notifyResourceUpdated(serverName: string, uri: string): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send('mcp:on-resource-updated', { serverName, uri });
-    }
-  }
-
-  private notifyConnectionError(serverName: string, error: string): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send('mcp:on-connection-error', { serverName, error });
-    }
+    this.sendToRenderer(channels.ON_TOOLS_CHANGED, undefined);
   }
 }

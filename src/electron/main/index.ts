@@ -12,7 +12,7 @@ import { app, BrowserWindow } from 'electron';
 import * as path from 'node:path';
 import log from 'electron-log';
 import { setupIPCHandlers, cleanupIPCHandlers } from './ipc-handlers.js';
-import { ServerManager } from './server-manager.js';
+import { McpManager } from './mcp-manager.js';
 
 // Configure logging
 log.transports.file.level = 'info';
@@ -23,15 +23,15 @@ log.transports.console.level = 'debug';
 
 // Keep a global reference of the window object to prevent garbage collection
 let mainWindow: BrowserWindow | null = null;
-let serverManager: ServerManager | null = null;
+let serverManager: McpManager | null = null;
 
 // Declare __dirname for ESM compatibility (set by Vite)
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
 const createWindow = async (): Promise<void> => {
-  // Initialize server manager
-  serverManager = new ServerManager();
+  // Initialize MCP manager (lifecycle + tool state)
+  serverManager = new McpManager();
   await serverManager.initialize();
 
   // Create the browser window with secure defaults

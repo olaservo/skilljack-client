@@ -7,7 +7,15 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import * as channels from '../../shared/channels.js';
-import type { ChatRequest, StreamEvent } from '../../shared/types.js';
+import type {
+  ChatRequest,
+  StreamEvent,
+  ServerStatusChangedPayload,
+  ServerHealthPayload,
+  ServerCrashedPayload,
+  ServerRestartingPayload,
+  ManagerReadyPayload,
+} from '../../shared/types.js';
 
 // ============================================
 // Channel Whitelist Validation
@@ -219,6 +227,112 @@ const electronAPI = {
   closeWindow: () => {
     validateInvokeChannel(channels.WINDOW_CLOSE);
     ipcRenderer.invoke(channels.WINDOW_CLOSE);
+  },
+
+  // ============================================
+  // Lifecycle Management
+  // ============================================
+
+  getServerLifecycleStates: () => {
+    validateInvokeChannel(channels.GET_SERVER_LIFECYCLE_STATES);
+    return ipcRenderer.invoke(channels.GET_SERVER_LIFECYCLE_STATES);
+  },
+
+  restartServer: (name: string) => {
+    validateInvokeChannel(channels.RESTART_SERVER);
+    return ipcRenderer.invoke(channels.RESTART_SERVER, name);
+  },
+
+  stopServer: (name: string) => {
+    validateInvokeChannel(channels.STOP_SERVER);
+    return ipcRenderer.invoke(channels.STOP_SERVER, name);
+  },
+
+  startServer: (name: string) => {
+    validateInvokeChannel(channels.START_SERVER);
+    return ipcRenderer.invoke(channels.START_SERVER, name);
+  },
+
+  // ============================================
+  // Lifecycle Event Listeners
+  // ============================================
+
+  onServerStatusChanged: (
+    callback: (data: ServerStatusChangedPayload) => void
+  ): (() => void) => {
+    validateOnChannel(channels.ON_SERVER_STATUS_CHANGED);
+    const handler = (_event: Electron.IpcRendererEvent, data: ServerStatusChangedPayload) => {
+      callback(data);
+    };
+    ipcRenderer.on(channels.ON_SERVER_STATUS_CHANGED, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.ON_SERVER_STATUS_CHANGED, handler);
+    };
+  },
+
+  onServerHealthy: (
+    callback: (data: ServerHealthPayload) => void
+  ): (() => void) => {
+    validateOnChannel(channels.ON_SERVER_HEALTHY);
+    const handler = (_event: Electron.IpcRendererEvent, data: ServerHealthPayload) => {
+      callback(data);
+    };
+    ipcRenderer.on(channels.ON_SERVER_HEALTHY, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.ON_SERVER_HEALTHY, handler);
+    };
+  },
+
+  onServerUnhealthy: (
+    callback: (data: ServerHealthPayload) => void
+  ): (() => void) => {
+    validateOnChannel(channels.ON_SERVER_UNHEALTHY);
+    const handler = (_event: Electron.IpcRendererEvent, data: ServerHealthPayload) => {
+      callback(data);
+    };
+    ipcRenderer.on(channels.ON_SERVER_UNHEALTHY, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.ON_SERVER_UNHEALTHY, handler);
+    };
+  },
+
+  onServerCrashed: (
+    callback: (data: ServerCrashedPayload) => void
+  ): (() => void) => {
+    validateOnChannel(channels.ON_SERVER_CRASHED);
+    const handler = (_event: Electron.IpcRendererEvent, data: ServerCrashedPayload) => {
+      callback(data);
+    };
+    ipcRenderer.on(channels.ON_SERVER_CRASHED, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.ON_SERVER_CRASHED, handler);
+    };
+  },
+
+  onServerRestarting: (
+    callback: (data: ServerRestartingPayload) => void
+  ): (() => void) => {
+    validateOnChannel(channels.ON_SERVER_RESTARTING);
+    const handler = (_event: Electron.IpcRendererEvent, data: ServerRestartingPayload) => {
+      callback(data);
+    };
+    ipcRenderer.on(channels.ON_SERVER_RESTARTING, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.ON_SERVER_RESTARTING, handler);
+    };
+  },
+
+  onManagerReady: (
+    callback: (data: ManagerReadyPayload) => void
+  ): (() => void) => {
+    validateOnChannel(channels.ON_MANAGER_READY);
+    const handler = (_event: Electron.IpcRendererEvent, data: ManagerReadyPayload) => {
+      callback(data);
+    };
+    ipcRenderer.on(channels.ON_MANAGER_READY, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.ON_MANAGER_READY, handler);
+    };
   },
 };
 
