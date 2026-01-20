@@ -447,16 +447,36 @@ export class McpManager {
     // Handle built-in tool-manager UI
     if (serverName === 'tool-manager' && uri === 'builtin://tool-manager') {
       try {
-        // Read from the static folder
-        const htmlPath = join(__dirname, '../../web/static/tool-manager/mcp-app.html');
-        const html = await readFile(htmlPath, 'utf-8');
-        return {
-          uri,
-          mimeType: 'text/html;mcp-app',
-          text: html,
-          serverName: 'tool-manager',
-        };
-      } catch {
+        // In development, the file is in src/web/static/
+        // In production, it would be in the app resources
+        const appPath = app.getAppPath();
+        const possiblePaths = [
+          // Development: relative to app root
+          join(appPath, 'src/web/static/tool-manager/mcp-app.html'),
+          // Production: in resources folder
+          join(appPath, 'resources/tool-manager/mcp-app.html'),
+          // Fallback: relative to __dirname (original path)
+          join(__dirname, '../../web/static/tool-manager/mcp-app.html'),
+          join(__dirname, '../../../src/web/static/tool-manager/mcp-app.html'),
+        ];
+
+        for (const htmlPath of possiblePaths) {
+          if (existsSync(htmlPath)) {
+            const html = await readFile(htmlPath, 'utf-8');
+            log.info('[McpManager] Loaded tool-manager UI from:', htmlPath);
+            return {
+              uri,
+              mimeType: 'text/html;mcp-app',
+              text: html,
+              serverName: 'tool-manager',
+            };
+          }
+        }
+
+        log.warn('[McpManager] Tool-manager UI not found. Tried paths:', possiblePaths);
+        return null;
+      } catch (err) {
+        log.error('[McpManager] Failed to load tool-manager UI:', err);
         return null;
       }
     }

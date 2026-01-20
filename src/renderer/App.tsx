@@ -11,16 +11,21 @@ import { ThemeProvider } from './chat/context/ThemeContext';
 import { ChatProvider } from './chat/context/ChatContext';
 import { SettingsProvider } from './settings';
 import { ChatDrawer } from './chat/components';
+import { McpAppProvider, McpAppPanelsContainer } from './mcp-apps';
 
 function App() {
   return (
     <SettingsProvider>
       <ThemeProvider>
         <ChatProvider>
-          <div className="skilljack-app">
-            {/* In Electron mode, the drawer is always visible as the main UI */}
-            <ChatDrawer alwaysOpen />
-          </div>
+          <McpAppProvider>
+            <div className="skilljack-app">
+              {/* MCP App panels area */}
+              <McpAppPanelsContainer />
+              {/* In Electron mode, the drawer is always visible as the main UI */}
+              <ChatDrawer alwaysOpen />
+            </div>
+          </McpAppProvider>
         </ChatProvider>
       </ThemeProvider>
     </SettingsProvider>

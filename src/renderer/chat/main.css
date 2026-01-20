@@ -789,3 +789,237 @@
   border-color: var(--chat-warning);
   color: var(--chat-warning);
 }
+
+/* ============================================
+   MCP App Panels
+   ============================================ */
+
+.mcp-app-container {
+  display: none;
+  flex-direction: column;
+  background: var(--chat-bg-secondary);
+  border-bottom: 1px solid var(--chat-border);
+}
+
+.mcp-app-container.has-app {
+  display: flex;
+  flex: 1;
+  min-height: 200px;
+  max-height: 60vh;
+  overflow: hidden;
+}
+
+/* Layout Controls */
+.mcp-layout-controls {
+  display: flex;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--chat-bg);
+  border-bottom: 1px solid var(--chat-border);
+}
+
+.mcp-layout-btn {
+  background: transparent;
+  border: 1px solid var(--chat-border);
+  color: var(--chat-text-muted);
+  padding: var(--space-xs);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.mcp-layout-btn:hover {
+  border-color: var(--chat-accent);
+  color: var(--chat-accent);
+}
+
+.mcp-layout-btn.active {
+  background: var(--chat-accent);
+  border-color: var(--chat-accent);
+  color: #fff;
+}
+
+/* Tab Bar */
+.mcp-app-tabs {
+  display: none;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--chat-bg);
+  border-bottom: 1px solid var(--chat-border);
+  overflow-x: auto;
+}
+
+.mcp-app-container[data-layout="tabs"] .mcp-app-tabs {
+  display: flex;
+}
+
+.mcp-app-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--chat-bg-secondary);
+  border: 1px solid var(--chat-border);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  color: var(--chat-text-muted);
+  font-size: var(--font-size-xs);
+  font-family: var(--chat-font);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--transition-fast);
+}
+
+.mcp-app-tab:hover {
+  color: var(--chat-text);
+  border-color: var(--chat-accent);
+}
+
+.mcp-app-tab.active {
+  background: var(--chat-bg);
+  color: var(--chat-text);
+  border-bottom-color: var(--chat-bg);
+}
+
+.mcp-tab-label {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mcp-tab-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.mcp-tab-close:hover {
+  opacity: 1;
+  color: var(--chat-error);
+}
+
+/* Panels Container */
+.mcp-app-panels {
+  display: flex;
+  flex: 1;
+  overflow: auto;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+}
+
+/* Grid Layout */
+.mcp-app-container[data-layout="grid"] .mcp-app-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
+}
+
+/* Stack Layout */
+.mcp-app-container[data-layout="stack"] .mcp-app-panels {
+  flex-direction: column;
+}
+
+/* Tabs Layout - hide non-active panels */
+.mcp-app-container[data-layout="tabs"] .mcp-app-panel {
+  display: none;
+}
+
+.mcp-app-container[data-layout="tabs"] .mcp-app-panel.active {
+  display: flex;
+}
+
+/* Individual Panel */
+.mcp-app-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--chat-bg);
+  border: 1px solid var(--chat-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  min-height: 200px;
+}
+
+.mcp-app-container[data-layout="tabs"] .mcp-app-panel {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+}
+
+/* Panel Header */
+.mcp-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--chat-bg-secondary);
+  border-bottom: 1px solid var(--chat-border);
+  flex-shrink: 0;
+}
+
+.mcp-panel-title {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--chat-accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-panel-close {
+  background: transparent;
+  border: none;
+  color: var(--chat-text-muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.mcp-panel-close:hover {
+  color: var(--chat-error);
+}
+
+/* Panel Content */
+.mcp-panel-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  min-height: 150px;
+}
+
+.mcp-panel-loading,
+.mcp-panel-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-lg);
+  color: var(--chat-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.mcp-panel-error {
+  color: var(--chat-error);
+}
+
+/* App Iframe */
+.mcp-app-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: transparent;
+  min-height: 150px;
+}
+
+/* Hide tab bar header in tabs mode (already showing in tab bar) */
+.mcp-app-container[data-layout="tabs"] .mcp-panel-header {
+  display: none;
+}
