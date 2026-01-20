@@ -3,13 +3,14 @@
  *
  * Executes tool calls from LLM responses.
  * Routes theme tools to client-side execution via useThemeTools.
- * Routes MCP tools to server API.
+ * Routes MCP tools via communication adapter (IPC in Electron, HTTP in web).
  * Loads MCP Apps for tools with UI resources.
  */
 
 import { useCallback } from 'react';
 import { useChat } from '../context/ChatContext';
 import { useThemeTools, isThemeTool } from './useThemeTools';
+import { getCommunicationAdapter } from '../../hooks/useCommunication';
 import type { ChatToolCall } from '../types';
 
 // Declare global loadMcpApp function from app.js
@@ -33,6 +34,7 @@ export interface ToolExecutionResult {
 export function useToolExecution() {
   const { updateToolCall, state } = useChat();
   const { executeThemeTool } = useThemeTools();
+  const adapter = getCommunicationAdapter();
 
   // Find tool info by name to get UI resource info
   const getToolInfo = useCallback(
@@ -53,7 +55,7 @@ export function useToolExecution() {
       try {
         let result: ToolExecutionResult;
 
-        if (isThemeTool(toolCall.name)) {
+        if (isThemeTool(toolCall.qualifiedName)) {
           // Execute theme tools client-side
           const themeResult = await executeThemeTool(toolCall);
           result = {
@@ -62,26 +64,16 @@ export function useToolExecution() {
             isError: !themeResult.success,
           };
         } else {
-          // Execute MCP tools via server API
-          const response = await fetch(`/api/tools/${encodeURIComponent(toolCall.name)}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ arguments: toolCall.arguments }),
-          });
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-          }
-
-          const data = await response.json();
+          // Execute MCP tools via communication adapter (IPC in Electron, HTTP in web)
+          const data = await adapter.callTool(toolCall.qualifiedName, toolCall.arguments);
           result = {
             success: true,
-            content: data.result ?? data,
+            content: data.content ?? data,
             isError: data.isError ?? false,
           };
 
           // Load MCP App if tool has UI resource
-          const toolInfo = getToolInfo(toolCall.name);
+          const toolInfo = getToolInfo(toolCall.qualifiedName);
           if (toolInfo?.hasUi && toolInfo.uiResourceUri && window.loadMcpApp) {
             try {
               await window.loadMcpApp(

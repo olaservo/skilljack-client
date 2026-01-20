@@ -4,12 +4,16 @@
  * Environment-aware hook that returns the appropriate CommunicationAdapter
  * based on whether we're running in Electron or web mode.
  *
+ * IMPORTANT: Both useCommunication() and getCommunicationAdapter() return
+ * the SAME singleton instance. This is critical because the IPC adapter
+ * uses module-level state for stream management that breaks if multiple
+ * adapter instances are created.
+ *
  * Usage:
  *   const adapter = useCommunication();
  *   const servers = await adapter.getServers();
  */
 
-import { useMemo, useEffect, useRef } from 'react';
 import type { CommunicationAdapter } from '../../communication/types.js';
 import { createHTTPAdapter } from '../../communication/http-adapter.js';
 import { createIPCAdapter } from '../../communication/ipc-adapter.js';
@@ -22,50 +26,36 @@ function isElectron(): boolean {
 }
 
 /**
- * Get the appropriate communication adapter for the current environment.
- * This is a singleton that persists for the lifetime of the component tree.
+ * Module-level singleton adapter instance.
+ * Shared by both useCommunication() and getCommunicationAdapter().
  */
-export function useCommunication(): CommunicationAdapter {
-  const adapterRef = useRef<CommunicationAdapter | null>(null);
+let singletonAdapter: CommunicationAdapter | null = null;
 
-  // Create adapter once and memoize
-  const adapter = useMemo(() => {
-    if (adapterRef.current) {
-      return adapterRef.current;
-    }
-
+function getOrCreateAdapter(): CommunicationAdapter {
+  if (!singletonAdapter) {
     if (isElectron() && window.electronAPI) {
-      adapterRef.current = createIPCAdapter(window.electronAPI);
+      singletonAdapter = createIPCAdapter(window.electronAPI);
     } else {
-      adapterRef.current = createHTTPAdapter();
+      singletonAdapter = createHTTPAdapter();
     }
-
-    return adapterRef.current;
-  }, []);
-
-  // NOTE: We intentionally do NOT dispose the adapter on unmount.
-  // In Electron mode, the adapter is a singleton that should persist
-  // for the app lifetime. React StrictMode's double-mount would
-  // otherwise cause the chat stream callbacks to be lost.
-  // The adapter will be cleaned up when the window closes.
-
-  return adapter;
+  }
+  return singletonAdapter;
 }
 
 /**
- * Get a static adapter instance (for use outside React components)
+ * React hook to get the communication adapter.
+ * Returns the same singleton instance on every call.
  */
-let staticAdapter: CommunicationAdapter | null = null;
+export function useCommunication(): CommunicationAdapter {
+  return getOrCreateAdapter();
+}
 
+/**
+ * Get the static adapter instance (for use outside React components).
+ * Returns the same singleton instance as useCommunication().
+ */
 export function getCommunicationAdapter(): CommunicationAdapter {
-  if (!staticAdapter) {
-    if (isElectron() && window.electronAPI) {
-      staticAdapter = createIPCAdapter(window.electronAPI);
-    } else {
-      staticAdapter = createHTTPAdapter();
-    }
-  }
-  return staticAdapter;
+  return getOrCreateAdapter();
 }
 
 /**
