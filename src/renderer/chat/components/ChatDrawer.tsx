@@ -34,25 +34,33 @@ interface ChatDrawerProps {
 
 export function ChatDrawer({ alwaysOpen = false }: ChatDrawerProps) {
   const { state, toggleDrawer, closeDrawer } = useChat();
-  const [height, setHeight] = useState(400);
+  const [height, setHeight] = useState(() => Math.round(window.innerHeight * 0.6));
   const drawerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   const startY = useRef(0);
   const startHeight = useRef(0);
+  const heightRef = useRef(height);
+  heightRef.current = height; // Keep ref in sync with state
 
-  // In alwaysOpen mode, use full height
+  // Determine if drawer is open and calculate height
   const isOpen = alwaysOpen || state.isOpen;
-  const drawerHeight = alwaysOpen ? '100%' : (isOpen ? height : 0);
+  const drawerHeight = isOpen ? height : 0;
 
   // Handle resize drag
   const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     isDragging.current = true;
     startY.current = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    startHeight.current = height;
+    startHeight.current = heightRef.current;
+
+    // Prevent text selection during drag
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'ns-resize';
 
     const handleMove = (moveEvent: MouseEvent | TouchEvent) => {
       if (!isDragging.current) return;
+      moveEvent.preventDefault();
       const currentY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : moveEvent.clientY;
       const delta = startY.current - currentY;
       const newHeight = Math.min(Math.max(200, startHeight.current + delta), window.innerHeight - 100);
@@ -61,6 +69,8 @@ export function ChatDrawer({ alwaysOpen = false }: ChatDrawerProps) {
 
     const handleEnd = () => {
       isDragging.current = false;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
       document.removeEventListener('mousemove', handleMove);
       document.removeEventListener('mouseup', handleEnd);
       document.removeEventListener('touchmove', handleMove);
@@ -69,9 +79,9 @@ export function ChatDrawer({ alwaysOpen = false }: ChatDrawerProps) {
 
     document.addEventListener('mousemove', handleMove);
     document.addEventListener('mouseup', handleEnd);
-    document.addEventListener('touchmove', handleMove);
+    document.addEventListener('touchmove', handleMove, { passive: false });
     document.addEventListener('touchend', handleEnd);
-  }, [height]);
+  }, []);
 
   return (
     <>
@@ -85,17 +95,15 @@ export function ChatDrawer({ alwaysOpen = false }: ChatDrawerProps) {
         aria-label="Chat drawer"
         aria-hidden={!isOpen}
       >
-        {/* Resize Handle (hidden in always-open mode) */}
-        {!alwaysOpen && (
-          <div
-            className="chat-drawer-resize"
-            onMouseDown={handleResizeStart}
-            onTouchStart={handleResizeStart}
-            role="separator"
-            aria-orientation="horizontal"
-            aria-label="Resize chat drawer"
-          />
-        )}
+        {/* Resize Handle */}
+        <div
+          className="chat-drawer-resize"
+          onMouseDown={handleResizeStart}
+          onTouchStart={handleResizeStart}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize chat drawer"
+        />
 
         {/* Header */}
         <div className="chat-drawer-header">

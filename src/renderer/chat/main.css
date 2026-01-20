@@ -44,6 +44,18 @@
 }
 
 /* ============================================
+   Skilljack App Container
+   ============================================ */
+
+.skilljack-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ============================================
    Chat Drawer Container
    ============================================ */
 
@@ -74,16 +86,60 @@
   transform: translateY(0);
 }
 
+/* Always-open mode (Electron) - use flex layout instead of fixed positioning */
+.chat-drawer.always-open {
+  position: relative;
+  bottom: auto;
+  left: auto;
+  right: auto;
+  flex: 1 0 auto; /* Grow to fill space, don't shrink below height, base size from height prop */
+  min-height: 200px;
+  max-height: none;
+  transform: none;
+  border-top: 1px solid var(--chat-border);
+}
+
+/* When MCP apps are visible, chat drawer gets explicit height from inline style */
+.skilljack-app:has(.mcp-app-container.has-app) .chat-drawer.always-open {
+  flex: 0 0 auto; /* Don't grow/shrink - use explicit height */
+}
+
 /* Resize Handle */
 .chat-drawer-resize {
-  height: 4px;
+  height: 8px;
   cursor: ns-resize;
   background-color: var(--chat-bg-secondary);
   flex-shrink: 0;
   transition: background-color var(--transition-fast);
+  position: relative;
+  user-select: none;
+  touch-action: none; /* Prevent scroll on touch devices */
+  z-index: 10;
+}
+
+/* Visual grab indicator */
+.chat-drawer-resize::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 4px;
+  background-color: var(--chat-border);
+  border-radius: 2px;
+  pointer-events: none; /* Don't block parent's mouse events */
 }
 
 .chat-drawer-resize:hover {
+  background-color: var(--chat-accent);
+}
+
+.chat-drawer-resize:hover::after {
+  background-color: var(--chat-text);
+}
+
+.chat-drawer-resize:active {
   background-color: var(--chat-accent);
 }
 
@@ -803,9 +859,8 @@
 
 .mcp-app-container.has-app {
   display: flex;
-  flex: 1;
-  min-height: 200px;
-  max-height: 60vh;
+  flex: 1 1 auto; /* Grow and shrink to fill remaining space */
+  min-height: 150px;
   overflow: hidden;
 }
 
