@@ -280,6 +280,42 @@ const SERVER_START_TOOL: ToolWithUIInfo = {
   serverName: 'server-config',
 };
 
+const SERVER_ENABLE_TOOL: ToolWithUIInfo = {
+  name: 'server-config__enable-server',
+  displayName: 'enable-server',
+  description: 'Enable a disabled MCP server. When enabled, the server\'s tools become available for use.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Name of the server to enable',
+      },
+    },
+    required: ['name'],
+  },
+  hasUi: false,
+  serverName: 'server-config',
+};
+
+const SERVER_DISABLE_TOOL: ToolWithUIInfo = {
+  name: 'server-config__disable-server',
+  displayName: 'disable-server',
+  description: 'Disable an MCP server. When disabled, the server\'s tools will not be available for use.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Name of the server to disable',
+      },
+    },
+    required: ['name'],
+  },
+  hasUi: false,
+  serverName: 'server-config',
+};
+
 // All server-config action tools
 const SERVER_CONFIG_ACTION_TOOLS: ToolWithUIInfo[] = [
   SERVER_LIST_TOOL,
@@ -288,6 +324,8 @@ const SERVER_CONFIG_ACTION_TOOLS: ToolWithUIInfo[] = [
   SERVER_RESTART_TOOL,
   SERVER_STOP_TOOL,
   SERVER_START_TOOL,
+  SERVER_ENABLE_TOOL,
+  SERVER_DISABLE_TOOL,
 ];
 
 // ============================================
@@ -663,6 +701,54 @@ export class McpManager {
       } catch (err) {
         return {
           content: [{ type: 'text', text: `Failed to start server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+    }
+
+    if (name === 'server-config__enable-server') {
+      const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+      try {
+        this.setServerEnabled(serverName, true);
+        return {
+          content: [{ type: 'text', text: `Server "${serverName}" has been enabled. Its tools are now available.` }],
+          serverName: 'server-config',
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Failed to enable server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+    }
+
+    if (name === 'server-config__disable-server') {
+      const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+      try {
+        this.setServerEnabled(serverName, false);
+        return {
+          content: [{ type: 'text', text: `Server "${serverName}" has been disabled. Its tools are no longer available.` }],
+          serverName: 'server-config',
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Failed to disable server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
           serverName: 'server-config',
           isError: true,
         };
