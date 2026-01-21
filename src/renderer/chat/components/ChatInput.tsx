@@ -21,12 +21,21 @@ export function ChatInput() {
   const { state, setInput, sendMessage, navigateHistory } = useChat();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-focus textarea on mount (for Electron alwaysOpen mode)
+  // Auto-focus textarea on initial load
   useEffect(() => {
-    // Small delay to ensure app has fully rendered
-    setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 100);
+    const focusInput = () => {
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+      });
+    };
+
+    // If document already loaded, focus now; otherwise wait for load
+    if (document.readyState === 'complete') {
+      focusInput();
+    } else {
+      window.addEventListener('load', focusInput);
+      return () => window.removeEventListener('load', focusInput);
+    }
   }, []);
 
   // Auto-focus textarea when drawer opens (for web mode)
