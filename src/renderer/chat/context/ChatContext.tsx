@@ -14,6 +14,7 @@ import {
   useReducer,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
   type Dispatch,
 } from 'react';
@@ -256,6 +257,9 @@ export function ChatProvider({ children }: ChatProviderProps) {
   const { doer, dreamer } = useSettings();
   const adapter = useCommunication();
 
+  // Track which messages have triggered auto-continuation to prevent duplicates
+  const continuationTriggeredRef = useRef<Set<string>>(new Set());
+
   // Convenience action creators
   const toggleDrawer = useCallback(() => dispatch({ type: 'TOGGLE_DRAWER' }), []);
   const openDrawer = useCallback(() => dispatch({ type: 'OPEN_DRAWER' }), []);
@@ -266,7 +270,10 @@ export function ChatProvider({ children }: ChatProviderProps) {
     []
   );
   const clearMessages = useCallback(() => dispatch({ type: 'CLEAR_MESSAGES' }), []);
-  const newSession = useCallback(() => dispatch({ type: 'NEW_SESSION' }), []);
+  const newSession = useCallback(() => {
+    dispatch({ type: 'NEW_SESSION' });
+    continuationTriggeredRef.current.clear();
+  }, []);
 
   const addMessage = useCallback(
     (message: Omit<ChatMessage, 'id' | 'timestamp'>): ChatMessage => {
@@ -329,6 +336,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
       dispatch({ type: 'ADD_TO_HISTORY', value: content });
       dispatch({ type: 'SET_INPUT', value: '' });
       dispatch({ type: 'RESET_TURN' }); // Reset turn counter for new user message
+      continuationTriggeredRef.current.clear(); // Clear continuation tracking for new conversation turn
       addMessage({ role: 'user', content });
 
       // Create assistant message placeholder with model config for continuation
@@ -684,6 +692,17 @@ export function ChatProvider({ children }: ChatProviderProps) {
       console.log('[Chat] Auto-continue: Stopping due to tool errors');
       return;
     }
+
+    // Create a unique key for this continuation attempt (message ID + tool call count + turn)
+    const continuationKey = `${lastAssistantMsg.id}-${lastAssistantMsg.toolCalls.length}-${state.currentTurn}`;
+
+    // Skip if we've already triggered continuation for this state
+    if (continuationTriggeredRef.current.has(continuationKey)) {
+      return;
+    }
+
+    // Mark as triggered before calling to prevent duplicates
+    continuationTriggeredRef.current.add(continuationKey);
 
     console.log(`[Chat] Auto-continue: Triggering continuation (turn ${state.currentTurn + 1}/${modelConfig.maxTurns})`);
     continueAfterTools(lastAssistantMsg.id);
