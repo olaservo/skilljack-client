@@ -162,13 +162,49 @@ export interface ChatRequest {
   settings: ChatSettings;
 }
 
-export interface ChatApiMessage {
-  role: 'user' | 'assistant' | 'system';
+/**
+ * Message format for the chat API.
+ * Supports text messages and tool call/result messages matching AI SDK format.
+ */
+export type ChatApiMessage =
+  | ChatApiUserMessage
+  | ChatApiAssistantMessage
+  | ChatApiToolMessage
+  | ChatApiSystemMessage;
+
+export interface ChatApiUserMessage {
+  role: 'user';
   content: string;
-  toolCalls?: ToolCallInfo[];
-  toolResults?: ToolResultInfo[];
 }
 
+export interface ChatApiSystemMessage {
+  role: 'system';
+  content: string;
+}
+
+export interface ChatApiAssistantMessage {
+  role: 'assistant';
+  content: string | ChatApiAssistantContentPart[];
+}
+
+export type ChatApiAssistantContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'tool-call'; toolCallId: string; toolName: string; args: Record<string, unknown> };
+
+export interface ChatApiToolMessage {
+  role: 'tool';
+  content: ChatApiToolResultPart[];
+}
+
+export interface ChatApiToolResultPart {
+  type: 'tool-result';
+  toolCallId: string;
+  toolName: string;
+  result: unknown;
+  isError?: boolean;
+}
+
+// Legacy types for backwards compatibility
 export interface ToolCallInfo {
   id: string;
   name: string;

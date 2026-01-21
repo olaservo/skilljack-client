@@ -312,10 +312,67 @@ export function ChatProvider({ children }: ChatProviderProps) {
       dispatch({ type: 'SET_STREAMING_MESSAGE', id: assistantMsg.id });
 
       try {
-        // Build chat messages for API (use processedContent without /dream prefix)
-        const chatMessages = state.messages
-          .filter((m) => m.role !== 'system' && m.content.trim())
-          .map((m) => ({ role: m.role, content: m.content }));
+        // Build chat messages for API in AI SDK format
+        // This properly includes tool calls and results for conversation context
+        const chatMessages: Array<{
+          role: 'user' | 'assistant' | 'tool';
+          content: string | Array<{ type: string; [key: string]: unknown }>;
+        }> = [];
+
+        for (const m of state.messages) {
+          if (m.role === 'system') continue;
+
+          if (m.role === 'user') {
+            // User messages are simple text
+            if (m.content.trim()) {
+              chatMessages.push({ role: 'user', content: m.content });
+            }
+          } else if (m.role === 'assistant') {
+            // Assistant messages may have text and/or tool calls
+            const hasToolCalls = m.toolCalls && m.toolCalls.length > 0;
+            const hasText = m.content.trim();
+
+            if (!hasText && !hasToolCalls) continue;
+
+            if (hasToolCalls) {
+              // Build content array with text and tool calls
+              const contentParts: Array<{ type: string; [key: string]: unknown }> = [];
+
+              if (hasText) {
+                contentParts.push({ type: 'text', text: m.content });
+              }
+
+              for (const tc of m.toolCalls!) {
+                contentParts.push({
+                  type: 'tool-call',
+                  toolCallId: tc.id,
+                  toolName: tc.qualifiedName,
+                  args: tc.arguments,
+                });
+              }
+
+              chatMessages.push({ role: 'assistant', content: contentParts });
+
+              // Add tool result message if there are completed tool calls
+              const completedCalls = m.toolCalls!.filter((tc) => tc.result);
+              if (completedCalls.length > 0) {
+                const toolResults = completedCalls.map((tc) => ({
+                  type: 'tool-result',
+                  toolCallId: tc.id,
+                  toolName: tc.qualifiedName,
+                  result: tc.result!.content,
+                  isError: tc.result!.isError,
+                }));
+                chatMessages.push({ role: 'tool', content: toolResults });
+              }
+            } else {
+              // Text-only assistant message
+              chatMessages.push({ role: 'assistant', content: m.content });
+            }
+          }
+        }
+
+        // Add current user message
         chatMessages.push({ role: 'user', content: processedContent });
 
         // Build MCP context

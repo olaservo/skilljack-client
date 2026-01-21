@@ -405,13 +405,73 @@ async function handleChatStream(
     const systemPrompt = buildSystemPrompt(mcpContext, settings.systemPrompt);
 
     // Convert messages to AI SDK format
-    // Filter out empty messages and map to ModelMessage format
+    // Frontend now sends proper tool call/result format
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const messages: ModelMessage[] = request.messages
-      .filter((m) => m.content.trim() !== '')
-      .map((m) => ({
-        role: m.role as 'user' | 'assistant' | 'system',
-        content: m.content,
-      }));
+      .filter((m) => {
+        // Filter out empty messages, but keep tool messages
+        if (m.role === 'tool') return true;
+        if (typeof m.content === 'string') return m.content.trim() !== '';
+        return Array.isArray(m.content) && m.content.length > 0;
+      })
+      .map((m) => {
+        if (m.role === 'tool') {
+          // Tool result messages
+          const toolContent = m.content as Array<{
+            type: string;
+            toolCallId: string;
+            toolName: string;
+            result: unknown;
+            isError?: boolean;
+          }>;
+          return {
+            role: 'tool' as const,
+            content: toolContent.map((part) => ({
+              type: 'tool-result' as const,
+              toolCallId: part.toolCallId,
+              toolName: part.toolName,
+              // AI SDK requires output in { type, value } format
+              output: {
+                type: 'json' as const,
+                value: part.result,
+              },
+            })),
+          };
+        }
+        if (m.role === 'assistant' && Array.isArray(m.content)) {
+          // Assistant message with tool calls
+          const assistantContent = m.content as Array<{
+            type: string;
+            text?: string;
+            toolCallId?: string;
+            toolName?: string;
+            args?: Record<string, unknown>;
+          }>;
+          return {
+            role: 'assistant' as const,
+            content: assistantContent.map((part) => {
+              if (part.type === 'text') {
+                return { type: 'text' as const, text: part.text || '' };
+              }
+              if (part.type === 'tool-call') {
+                return {
+                  type: 'tool-call' as const,
+                  toolCallId: part.toolCallId || '',
+                  toolName: part.toolName || '',
+                  input: part.args || {},
+                };
+              }
+              // Fallback for unexpected parts
+              return { type: 'text' as const, text: '' };
+            }),
+          };
+        }
+        // Simple text message (user, system, or text-only assistant)
+        return {
+          role: m.role as 'user' | 'assistant' | 'system',
+          content: m.content as string,
+        };
+      }) as ModelMessage[];
 
     // Stream response using the existing provider
     const chatStream = streamChat({
