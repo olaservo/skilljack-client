@@ -1,6 +1,6 @@
 {
   "name": "@skilljack/mcp-server-manager",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "MCP server lifecycle manager with health checks, auto-restart, and graceful shutdown",
   "type": "module",
   "main": "./dist/index.js",
@@ -11,25 +11,49 @@
       "import": "./dist/index.js"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
+  "author": "Ola Hungerford",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/olaservo/skilljack-client.git",
+    "directory": "packages/mcp-server-manager"
+  },
+  "homepage": "https://github.com/olaservo/skilljack-client/tree/main/packages/mcp-server-manager#readme",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "server-manager",
+    "lifecycle",
+    "health-check",
+    "auto-restart",
+    "claude",
+    "ai"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.25.1"
   },
   "devDependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "@types/node": "^20.0.0",
-    "typescript": "^5.3.0",
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2",
     "vitest": "^2.0.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
   }
 }
