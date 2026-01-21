@@ -809,7 +809,8 @@
     }
 
     function toggleExpand(name) {
-      const card = document.getElementById(`card-${name}`);
+      // Use escapeHtml to match the ID format used in renderServers
+      const card = document.getElementById(`card-${escapeHtml(name)}`);
       if (card) {
         card.classList.toggle('expanded');
       }

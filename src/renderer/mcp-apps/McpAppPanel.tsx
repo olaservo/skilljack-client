@@ -385,7 +385,11 @@ export function McpAppPanel({ panel, onClose, isActive = true }: McpAppPanelProp
         // Restart server
         if (data.method === 'server-config/restartServer' && data.id) {
           try {
-            const { name } = data.params;
+            const { name } = data.params || {};
+            if (!name) {
+              sendToApp(createJsonRpcError(data.id, -32602, 'Missing required parameter: name'));
+              return;
+            }
             // Note: restartServer is exposed through window.electronAPI but not through the adapter yet
             // For now, we'll use the direct electronAPI if available
             if (window.electronAPI && 'restartServer' in window.electronAPI) {
@@ -405,7 +409,11 @@ export function McpAppPanel({ panel, onClose, isActive = true }: McpAppPanelProp
         // Stop server
         if (data.method === 'server-config/stopServer' && data.id) {
           try {
-            const { name } = data.params;
+            const { name } = data.params || {};
+            if (!name) {
+              sendToApp(createJsonRpcError(data.id, -32602, 'Missing required parameter: name'));
+              return;
+            }
             if (window.electronAPI && 'stopServer' in window.electronAPI) {
               await (window.electronAPI as { stopServer: (name: string) => Promise<void> }).stopServer(name);
               sendToApp(createJsonRpcResponse(data.id, { success: true }));
@@ -423,7 +431,11 @@ export function McpAppPanel({ panel, onClose, isActive = true }: McpAppPanelProp
         // Start server
         if (data.method === 'server-config/startServer' && data.id) {
           try {
-            const { name } = data.params;
+            const { name } = data.params || {};
+            if (!name) {
+              sendToApp(createJsonRpcError(data.id, -32602, 'Missing required parameter: name'));
+              return;
+            }
             if (window.electronAPI && 'startServer' in window.electronAPI) {
               await (window.electronAPI as { startServer: (name: string) => Promise<void> }).startServer(name);
               sendToApp(createJsonRpcResponse(data.id, { success: true }));

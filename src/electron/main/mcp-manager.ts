@@ -468,7 +468,7 @@ export class McpManager {
       const state = states.find((st) => st.name === s.name);
       return {
         name: s.name,
-        version: s.serverVersion?.name,
+        version: s.serverVersion?.version,
         status: state?.status ?? 'disconnected',
         toolCount: s.toolCount,
         healthy: state?.healthy,
@@ -551,6 +551,13 @@ export class McpManager {
         args?: string[];
         env?: Record<string, string>;
       };
+      if (!serverName || !command) {
+        return {
+          content: [{ type: 'text', text: `Missing required parameter: ${!serverName ? 'name' : 'command'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
       try {
         await this.addServerConfig({ name: serverName, command, args: serverArgs, env });
         return {
@@ -568,6 +575,13 @@ export class McpManager {
 
     if (name === 'server-config__remove-server') {
       const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
       try {
         await this.removeServerConfig(serverName);
         return {
@@ -585,6 +599,13 @@ export class McpManager {
 
     if (name === 'server-config__restart-server') {
       const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
       try {
         await this.restartServer(serverName);
         return {
@@ -602,6 +623,13 @@ export class McpManager {
 
     if (name === 'server-config__stop-server') {
       const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
       try {
         await this.stopServer(serverName);
         return {
@@ -619,6 +647,13 @@ export class McpManager {
 
     if (name === 'server-config__start-server') {
       const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
       try {
         await this.startServer(serverName);
         return {
