@@ -31,6 +31,27 @@ export function ChatInput() {
     }
   }, [state.isOpen]);
 
+  // Refocus textarea when processing completes
+  // Track previous processing state to detect completion transition
+  const wasProcessingRef = useRef(state.isProcessing);
+  useEffect(() => {
+    const wasProcessing = wasProcessingRef.current;
+    wasProcessingRef.current = state.isProcessing;
+
+    // Only refocus when transitioning from processing to not processing
+    // Note: Don't check state.isOpen because in Electron alwaysOpen mode it's false
+    if (wasProcessing && !state.isProcessing) {
+      // Use requestAnimationFrame + timeout to ensure we focus after React settles
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (textareaRef.current && document.activeElement !== textareaRef.current) {
+            textareaRef.current.focus();
+          }
+        }, 100);
+      });
+    }
+  }, [state.isProcessing]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       // Enter to send (without Shift)
