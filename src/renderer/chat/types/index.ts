@@ -8,6 +8,16 @@
 // Message Types
 // ============================================
 
+/**
+ * Model configuration stored with assistant messages for continuation
+ */
+export interface MessageModelConfig {
+  provider: 'anthropic' | 'openai';
+  modelId: string;
+  temperature: number;
+  maxTurns: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -16,6 +26,8 @@ export interface ChatMessage {
   toolCalls?: ChatToolCall[];
   isStreaming?: boolean;
   error?: string;
+  /** Model config for assistant messages - used for multi-turn continuation */
+  modelConfig?: MessageModelConfig;
 }
 
 export interface ChatToolCall {
@@ -100,6 +112,8 @@ export interface ChatState {
   tools: McpTool[];
   activeServers: string[] | null;  // null = all servers
   error: string | null;
+  /** Current turn in multi-turn tool workflow (0 = first turn) */
+  currentTurn: number;
 }
 
 export type ChatAction =
@@ -112,6 +126,7 @@ export type ChatAction =
   | { type: 'ADD_MESSAGE'; message: ChatMessage }
   | { type: 'UPDATE_MESSAGE'; id: string; updates: Partial<ChatMessage> }
   | { type: 'APPEND_STREAM'; id: string; content: string }
+  | { type: 'APPEND_TOOL_CALLS'; messageId: string; toolCalls: ChatToolCall[] }
   | { type: 'UPDATE_TOOL_CALL'; messageId: string; toolCallId: string; updates: Partial<ChatToolCall> }
   | { type: 'SET_PROCESSING'; isProcessing: boolean }
   | { type: 'SET_STREAMING_MESSAGE'; id: string | null }
@@ -121,7 +136,9 @@ export type ChatAction =
   | { type: 'FILTER_SERVERS'; serverNames: string[] | null }
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'CLEAR_MESSAGES' }
-  | { type: 'NEW_SESSION' };
+  | { type: 'NEW_SESSION' }
+  | { type: 'INCREMENT_TURN' }
+  | { type: 'RESET_TURN' };
 
 // ============================================
 // Theme Types

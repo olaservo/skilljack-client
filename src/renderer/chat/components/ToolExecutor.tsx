@@ -2,6 +2,7 @@
  * Tool Executor Component
  *
  * Watches for pending tool calls and executes them.
+ * After tools complete, ChatContext's useEffect handles continuation for multi-turn workflows.
  * This is a "behavior" component - it doesn't render anything visible.
  */
 
@@ -32,12 +33,13 @@ export function ToolExecutor() {
 
       // Mark as executing and run
       executingRef.current.add(message.id);
-      console.log('[ToolExecutor] Executing tools for message:', message.id, pendingTools.map(t => t.name));
+      console.log('[ToolExecutor] Executing tools for message:', message.id, pendingTools.map(t => t.displayName));
 
       executeAllTools(message.id, pendingTools)
         .then((results) => {
           console.log('[ToolExecutor] Tools executed:', results);
           executingRef.current.delete(message.id);
+          // Note: Continuation is handled by ChatContext's useEffect that watches for completed tools
         })
         .catch((err) => {
           console.error('[ToolExecutor] Error executing tools:', err);
