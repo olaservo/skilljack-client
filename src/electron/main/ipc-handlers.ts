@@ -299,6 +299,63 @@ export function setupIPCHandlers(
     }
   });
 
+  // ============================================
+  // Server Configuration
+  // ============================================
+
+  ipcMain.handle(channels.GET_SERVER_CONFIGS, async () => {
+    try {
+      const servers = await serverManager.getServerConfigs();
+      return { servers };
+    } catch (error) {
+      log.error('GET_SERVER_CONFIGS error:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle(
+    channels.ADD_SERVER_CONFIG,
+    async (
+      _event,
+      config: { name: string; command: string; args?: string[]; env?: Record<string, string> }
+    ) => {
+      try {
+        await serverManager.addServerConfig(config);
+        return { success: true };
+      } catch (error) {
+        log.error('ADD_SERVER_CONFIG error:', error);
+        throw error;
+      }
+    }
+  );
+
+  ipcMain.handle(
+    channels.UPDATE_SERVER_CONFIG,
+    async (
+      _event,
+      name: string,
+      config: { command?: string; args?: string[]; env?: Record<string, string>; enabled?: boolean }
+    ) => {
+      try {
+        await serverManager.updateServerConfig(name, config);
+        return { success: true };
+      } catch (error) {
+        log.error('UPDATE_SERVER_CONFIG error:', error);
+        throw error;
+      }
+    }
+  );
+
+  ipcMain.handle(channels.REMOVE_SERVER_CONFIG, async (_event, name: string) => {
+    try {
+      await serverManager.removeServerConfig(name);
+      return { success: true };
+    } catch (error) {
+      log.error('REMOVE_SERVER_CONFIG error:', error);
+      throw error;
+    }
+  });
+
   log.info('IPC handlers registered');
 }
 

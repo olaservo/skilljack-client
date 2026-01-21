@@ -160,6 +160,16 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SET_SERVERS':
       return { ...state, servers: action.servers };
 
+    case 'UPDATE_SERVER_STATUS':
+      return {
+        ...state,
+        servers: state.servers.map((server) =>
+          server.name === action.serverName
+            ? { ...server, ...action.updates }
+            : server
+        ),
+      };
+
     case 'SET_TOOLS':
       return { ...state, tools: action.tools };
 
@@ -413,6 +423,65 @@ export function ChatProvider({ children }: ChatProviderProps) {
     const unsubscribe = adapter.onEvent((event) => {
       if (event.type === 'tools_changed' || event.type === 'servers_changed') {
         fetchMcpContext();
+      }
+
+      // Handle lifecycle events for individual server status updates
+      if (event.type === 'server_status_changed') {
+        const { serverName, newStatus } = event.payload;
+        dispatch({
+          type: 'UPDATE_SERVER_STATUS',
+          serverName,
+          updates: { status: newStatus as ServerInfo['status'] },
+        });
+      }
+
+      if (event.type === 'server_healthy') {
+        const { serverName } = event.payload;
+        dispatch({
+          type: 'UPDATE_SERVER_STATUS',
+          serverName,
+          updates: {
+            status: 'connected',
+            healthChecksFailed: 0,
+            lastError: undefined,
+          },
+        });
+      }
+
+      if (event.type === 'server_unhealthy') {
+        const { serverName, error } = event.payload;
+        dispatch({
+          type: 'UPDATE_SERVER_STATUS',
+          serverName,
+          updates: {
+            status: 'unhealthy',
+            lastError: error,
+          },
+        });
+      }
+
+      if (event.type === 'server_crashed') {
+        const { serverName, willRestart } = event.payload;
+        dispatch({
+          type: 'UPDATE_SERVER_STATUS',
+          serverName,
+          updates: {
+            status: willRestart ? 'restarting' : 'failed',
+          },
+        });
+      }
+
+      if (event.type === 'server_restarting') {
+        const { serverName, attempt, maxAttempts } = event.payload;
+        dispatch({
+          type: 'UPDATE_SERVER_STATUS',
+          serverName,
+          updates: {
+            status: 'restarting',
+            restartAttempts: attempt,
+            maxRestartAttempts: maxAttempts,
+          },
+        });
       }
     });
 

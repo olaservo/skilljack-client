@@ -128,6 +128,22 @@ export const ON_SERVER_RESTARTING = 'mcp:on-server-restarting';
 export const ON_MANAGER_READY = 'mcp:on-manager-ready';
 
 // ============================================
+// Server Configuration Channels
+// ============================================
+
+/** Get server configurations from servers.json */
+export const GET_SERVER_CONFIGS = 'config:get-servers';
+
+/** Add a new server to servers.json */
+export const ADD_SERVER_CONFIG = 'config:add-server';
+
+/** Update an existing server in servers.json */
+export const UPDATE_SERVER_CONFIG = 'config:update-server';
+
+/** Remove a server from servers.json */
+export const REMOVE_SERVER_CONFIG = 'config:remove-server';
+
+// ============================================
 // Settings Channels
 // ============================================
 
@@ -180,6 +196,11 @@ export const INVOKE_CHANNELS = [
   RESTART_SERVER,
   STOP_SERVER,
   START_SERVER,
+  // Server configuration
+  GET_SERVER_CONFIGS,
+  ADD_SERVER_CONFIG,
+  UPDATE_SERVER_CONFIG,
+  REMOVE_SERVER_CONFIG,
 ] as const;
 
 /** Channels that renderer can listen to (main → renderer events) */

@@ -254,6 +254,40 @@ const electronAPI = {
   },
 
   // ============================================
+  // Server Configuration
+  // ============================================
+
+  getServerConfigs: () => {
+    validateInvokeChannel(channels.GET_SERVER_CONFIGS);
+    return ipcRenderer.invoke(channels.GET_SERVER_CONFIGS);
+  },
+
+  addServerConfig: (config: {
+    name: string;
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+  }) => {
+    validateInvokeChannel(channels.ADD_SERVER_CONFIG);
+    return ipcRenderer.invoke(channels.ADD_SERVER_CONFIG, config);
+  },
+
+  updateServerConfig: (name: string, config: {
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+    enabled?: boolean;
+  }) => {
+    validateInvokeChannel(channels.UPDATE_SERVER_CONFIG);
+    return ipcRenderer.invoke(channels.UPDATE_SERVER_CONFIG, name, config);
+  },
+
+  removeServerConfig: (name: string) => {
+    validateInvokeChannel(channels.REMOVE_SERVER_CONFIG);
+    return ipcRenderer.invoke(channels.REMOVE_SERVER_CONFIG, name);
+  },
+
+  // ============================================
   // Lifecycle Event Listeners
   // ============================================
 

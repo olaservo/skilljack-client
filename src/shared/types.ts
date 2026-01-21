@@ -86,6 +86,8 @@ export interface ToolWithUIInfo {
   /** Original tool name for display */
   displayName: string;
   description?: string;
+  /** JSON Schema for tool parameters */
+  inputSchema?: Record<string, unknown>;
   hasUi: boolean;
   uiResourceUri?: string;
   serverName: string;
@@ -242,6 +244,42 @@ export interface WebConfig {
   sandboxPort: number;
   multiServer: boolean;
   serverCount: number;
+}
+
+// ============================================
+// Server Configuration Types (for Server Config UI)
+// ============================================
+
+/**
+ * Server configuration entry as stored in servers.json
+ */
+export interface ServerConfigEntry {
+  /** Server name (unique identifier) */
+  name: string;
+  /** Transport type */
+  transport: 'stdio';
+  /** Command to execute */
+  command: string;
+  /** Command arguments */
+  args?: string[];
+  /** Environment variables */
+  env?: Record<string, string>;
+  /** Whether the server is enabled */
+  enabled?: boolean;
+}
+
+/**
+ * Server configuration with runtime status
+ */
+export interface ServerConfigWithStatus extends ServerConfigEntry {
+  /** Runtime connection status */
+  status: import('@skilljack/mcp-server-manager').ServerStatus;
+  /** Number of tools provided by this server */
+  toolCount: number;
+  /** Whether the server is healthy */
+  healthy: boolean;
+  /** Last error message if any */
+  lastError?: string;
 }
 
 // ============================================

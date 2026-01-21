@@ -37,12 +37,35 @@ export interface ToolCallResult {
 // Server Types
 // ============================================
 
+/**
+ * Server lifecycle status values.
+ * Maps to ServerStatus from @skilljack/mcp-server-manager
+ */
+export type ServerStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'unhealthy'
+  | 'restarting'
+  | 'failed'
+  | 'stopped';
+
 export interface ServerInfo {
   name: string;
   version?: string;
-  status: 'connected' | 'connecting' | 'error';
+  status: ServerStatus;
   toolCount: number;
   capabilities?: Record<string, unknown>;
+  /** Number of health checks passed (when healthy) */
+  healthChecksPassed?: number;
+  /** Number of consecutive health check failures */
+  healthChecksFailed?: number;
+  /** Current restart attempt number (when restarting) */
+  restartAttempts?: number;
+  /** Maximum restart attempts allowed */
+  maxRestartAttempts?: number;
+  /** Last error message (when failed/unhealthy) */
+  lastError?: string;
 }
 
 export interface McpTool {
@@ -93,6 +116,7 @@ export type ChatAction =
   | { type: 'SET_PROCESSING'; isProcessing: boolean }
   | { type: 'SET_STREAMING_MESSAGE'; id: string | null }
   | { type: 'SET_SERVERS'; servers: ServerInfo[] }
+  | { type: 'UPDATE_SERVER_STATUS'; serverName: string; updates: Partial<ServerInfo> }
   | { type: 'SET_TOOLS'; tools: McpTool[] }
   | { type: 'FILTER_SERVERS'; serverNames: string[] | null }
   | { type: 'SET_ERROR'; error: string | null }
