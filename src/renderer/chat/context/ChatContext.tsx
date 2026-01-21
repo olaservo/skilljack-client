@@ -712,6 +712,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
           originalName: t.displayName || t.name,
           serverName: t.serverName || 'default',
           description: t.description,
+          inputSchema: t.inputSchema,
           hasUi: t.hasUi,
           uiResourceUri: t.uiResourceUri,
         }));
