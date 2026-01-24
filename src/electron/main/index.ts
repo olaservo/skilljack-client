@@ -70,6 +70,21 @@ const createWindow = async (): Promise<void> => {
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+    const focusApp = () => {
+      mainWindow?.focus();
+      mainWindow?.webContents.focus();
+      // Focus the chat input element
+      mainWindow?.webContents.executeJavaScript(
+        `document.querySelector('.chat-input')?.focus()`
+      );
+    };
+    if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+      // Dev mode: focus after DevTools has opened
+      setTimeout(focusApp, 500);
+    } else {
+      // Production: focus immediately
+      focusApp();
+    }
   });
 
   // Clean up on close

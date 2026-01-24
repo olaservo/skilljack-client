@@ -135,6 +135,35 @@ export function createIPCAdapter(electronAPI: ElectronAPI): CommunicationAdapter
     },
 
     // ============================================
+    // Server Configuration
+    // ============================================
+
+    async getServerConfigs() {
+      const data = await electronAPI.getServerConfigs();
+      return data.servers || [];
+    },
+
+    async addServerConfig(config: {
+      name: string;
+      command: string;
+      args?: string[];
+      env?: Record<string, string>;
+    }) {
+      return electronAPI.addServerConfig(config);
+    },
+
+    async updateServerConfig(
+      name: string,
+      config: { command?: string; args?: string[]; env?: Record<string, string>; enabled?: boolean }
+    ) {
+      return electronAPI.updateServerConfig(name, config);
+    },
+
+    async removeServerConfig(name: string) {
+      return electronAPI.removeServerConfig(name);
+    },
+
+    // ============================================
     // Resources
     // ============================================
 
@@ -241,6 +270,43 @@ export function createIPCAdapter(electronAPI: ElectronAPI): CommunicationAdapter
       cleanups.push(
         electronAPI.onConnectionError((data) => {
           handler({ type: 'connection_error', ...data });
+        })
+      );
+
+      // Lifecycle events
+      cleanups.push(
+        electronAPI.onServerStatusChanged((data) => {
+          handler({ type: 'server_status_changed', payload: data });
+        })
+      );
+
+      cleanups.push(
+        electronAPI.onServerHealthy((data) => {
+          handler({ type: 'server_healthy', payload: data });
+        })
+      );
+
+      cleanups.push(
+        electronAPI.onServerUnhealthy((data) => {
+          handler({ type: 'server_unhealthy', payload: data });
+        })
+      );
+
+      cleanups.push(
+        electronAPI.onServerCrashed((data) => {
+          handler({ type: 'server_crashed', payload: data });
+        })
+      );
+
+      cleanups.push(
+        electronAPI.onServerRestarting((data) => {
+          handler({ type: 'server_restarting', payload: data });
+        })
+      );
+
+      cleanups.push(
+        electronAPI.onManagerReady((data) => {
+          handler({ type: 'manager_ready', payload: data });
         })
       );
 

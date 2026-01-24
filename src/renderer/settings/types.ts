@@ -62,7 +62,7 @@ export const defaultModelSettings: ModelSettings = {
     provider: 'anthropic',
     modelId: 'claude-haiku-4-5-20251001',
     temperature: 0.3, // Low for deterministic task execution
-    maxTurns: 1, // Single step - fast and focused
+    maxTurns: 5, // Multiple steps for multi-tool workflows
   },
   dreamer: {
     provider: 'anthropic',

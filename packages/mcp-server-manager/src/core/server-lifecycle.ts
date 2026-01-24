@@ -104,7 +104,8 @@ export class ServerLifecycle extends EventEmitter {
    * Starts the server connection
    */
   async start(): Promise<void> {
-    if (this.state.status !== 'disconnected' && this.state.status !== 'failed') {
+    // Allow starting from disconnected, failed, or stopped states
+    if (this.state.status !== 'disconnected' && this.state.status !== 'failed' && this.state.status !== 'stopped') {
       this.logger.warn('Cannot start server in current state', {
         status: this.state.status,
       });

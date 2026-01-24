@@ -14,6 +14,7 @@ import {
   useReducer,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
   type Dispatch,
 } from 'react';
@@ -24,6 +25,7 @@ import type {
   ChatToolCall,
   ServerInfo,
   McpTool,
+  MessageModelConfig,
 } from '../types';
 import { useSettings } from '../../settings';
 import { useCommunication } from '../../hooks/useCommunication';
@@ -54,6 +56,7 @@ const initialState: ChatState = {
   tools: [],
   activeServers: null,
   error: null,
+  currentTurn: 0,
 };
 
 // ============================================
@@ -160,6 +163,16 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'SET_SERVERS':
       return { ...state, servers: action.servers };
 
+    case 'UPDATE_SERVER_STATUS':
+      return {
+        ...state,
+        servers: state.servers.map((server) =>
+          server.name === action.serverName
+            ? { ...server, ...action.updates }
+            : server
+        ),
+      };
+
     case 'SET_TOOLS':
       return { ...state, tools: action.tools };
 
@@ -178,6 +191,26 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         sessionId: generateSessionId(),
         messages: [],
         error: null,
+        currentTurn: 0,
+      };
+
+    case 'INCREMENT_TURN':
+      return { ...state, currentTurn: state.currentTurn + 1 };
+
+    case 'RESET_TURN':
+      return { ...state, currentTurn: 0 };
+
+    case 'APPEND_TOOL_CALLS':
+      return {
+        ...state,
+        messages: state.messages.map((msg) => {
+          if (msg.id !== action.messageId) return msg;
+          const existingToolCalls = msg.toolCalls || [];
+          return {
+            ...msg,
+            toolCalls: [...existingToolCalls, ...action.toolCalls],
+          };
+        }),
       };
 
     default:
@@ -205,6 +238,8 @@ interface ChatContextValue {
   navigateHistory: (direction: 'up' | 'down') => void;
   clearMessages: () => void;
   newSession: () => void;
+  /** Continue the conversation after tools have been executed */
+  continueAfterTools: (messageId: string) => Promise<void>;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -222,6 +257,9 @@ export function ChatProvider({ children }: ChatProviderProps) {
   const { doer, dreamer } = useSettings();
   const adapter = useCommunication();
 
+  // Track which messages have triggered auto-continuation to prevent duplicates
+  const continuationTriggeredRef = useRef<Set<string>>(new Set());
+
   // Convenience action creators
   const toggleDrawer = useCallback(() => dispatch({ type: 'TOGGLE_DRAWER' }), []);
   const openDrawer = useCallback(() => dispatch({ type: 'OPEN_DRAWER' }), []);
@@ -232,7 +270,10 @@ export function ChatProvider({ children }: ChatProviderProps) {
     []
   );
   const clearMessages = useCallback(() => dispatch({ type: 'CLEAR_MESSAGES' }), []);
-  const newSession = useCallback(() => dispatch({ type: 'NEW_SESSION' }), []);
+  const newSession = useCallback(() => {
+    dispatch({ type: 'NEW_SESSION' });
+    continuationTriggeredRef.current.clear();
+  }, []);
 
   const addMessage = useCallback(
     (message: Omit<ChatMessage, 'id' | 'timestamp'>): ChatMessage => {
@@ -294,18 +335,93 @@ export function ChatProvider({ children }: ChatProviderProps) {
       // Add user message (show original content including /dream prefix)
       dispatch({ type: 'ADD_TO_HISTORY', value: content });
       dispatch({ type: 'SET_INPUT', value: '' });
+      dispatch({ type: 'RESET_TURN' }); // Reset turn counter for new user message
+      continuationTriggeredRef.current.clear(); // Clear continuation tracking for new conversation turn
       addMessage({ role: 'user', content });
 
-      // Create assistant message placeholder
-      const assistantMsg = addMessage({ role: 'assistant', content: '', isStreaming: true });
+      // Create assistant message placeholder with model config for continuation
+      const msgModelConfig: MessageModelConfig = {
+        provider: modelConfig.provider,
+        modelId: modelConfig.modelId,
+        temperature: modelConfig.temperature,
+        maxTurns: modelConfig.maxTurns,
+      };
+      const assistantMsg = addMessage({
+        role: 'assistant',
+        content: '',
+        isStreaming: true,
+        modelConfig: msgModelConfig,
+      });
       dispatch({ type: 'SET_PROCESSING', isProcessing: true });
       dispatch({ type: 'SET_STREAMING_MESSAGE', id: assistantMsg.id });
 
       try {
-        // Build chat messages for API (use processedContent without /dream prefix)
-        const chatMessages = state.messages
-          .filter((m) => m.role !== 'system' && m.content.trim())
-          .map((m) => ({ role: m.role, content: m.content }));
+        // Build chat messages for API in AI SDK format
+        // This properly includes tool calls and results for conversation context
+        const chatMessages: Array<{
+          role: 'user' | 'assistant' | 'tool';
+          content: string | Array<{ type: string; [key: string]: unknown }>;
+        }> = [];
+
+        for (const m of state.messages) {
+          if (m.role === 'system') continue;
+
+          if (m.role === 'user') {
+            // User messages are simple text
+            if (m.content.trim()) {
+              chatMessages.push({ role: 'user', content: m.content });
+            }
+          } else if (m.role === 'assistant') {
+            // Assistant messages may have text and/or tool calls
+            const hasToolCalls = m.toolCalls && m.toolCalls.length > 0;
+            const hasText = m.content.trim();
+
+            if (!hasText && !hasToolCalls) continue;
+
+            if (hasToolCalls) {
+              // Only include tool calls that have results (API requires tool_result for every tool_use)
+              const completedCalls = m.toolCalls!.filter((tc) => tc.result);
+
+              // Build content array with text and completed tool calls only
+              const contentParts: Array<{ type: string; [key: string]: unknown }> = [];
+
+              if (hasText) {
+                contentParts.push({ type: 'text', text: m.content });
+              }
+
+              for (const tc of completedCalls) {
+                contentParts.push({
+                  type: 'tool-call',
+                  toolCallId: tc.id,
+                  toolName: tc.qualifiedName,
+                  args: tc.arguments,
+                });
+              }
+
+              // Only add assistant message if there's content
+              if (contentParts.length > 0) {
+                chatMessages.push({ role: 'assistant', content: contentParts });
+              }
+
+              // Add tool result message for completed calls
+              if (completedCalls.length > 0) {
+                const toolResults = completedCalls.map((tc) => ({
+                  type: 'tool-result',
+                  toolCallId: tc.id,
+                  toolName: tc.qualifiedName,
+                  result: tc.result!.content,
+                  isError: tc.result!.isError,
+                }));
+                chatMessages.push({ role: 'tool', content: toolResults });
+              }
+            } else {
+              // Text-only assistant message
+              chatMessages.push({ role: 'assistant', content: m.content });
+            }
+          }
+        }
+
+        // Add current user message
         chatMessages.push({ role: 'user', content: processedContent });
 
         // Build MCP context
@@ -359,6 +475,172 @@ export function ChatProvider({ children }: ChatProviderProps) {
     [state.isProcessing, state.messages, state.servers, state.tools, state.sessionId, addMessage, doer, dreamer, adapter]
   );
 
+  /**
+   * Continue the conversation after tools have been executed.
+   * This enables multi-turn tool workflows (e.g., list servers → enable server → confirm).
+   * Appends to the existing assistant message rather than creating a new one.
+   */
+  const continueAfterTools = useCallback(
+    async (messageId: string) => {
+      // Find the message we're continuing from
+      const message = state.messages.find((m) => m.id === messageId);
+      if (!message || message.role !== 'assistant') {
+        console.warn('[Chat] continueAfterTools: Invalid message', messageId);
+        return;
+      }
+
+      // Skip if already processing
+      if (state.isProcessing) {
+        console.log('[Chat] continueAfterTools: Already processing, skipping');
+        return;
+      }
+
+      // Check model config for maxTurns
+      const msgModelConfig = message.modelConfig;
+      if (!msgModelConfig) {
+        console.log('[Chat] continueAfterTools: No model config, skipping');
+        return;
+      }
+
+      // Check if we've exceeded maxTurns
+      const nextTurn = state.currentTurn + 1;
+      if (nextTurn >= msgModelConfig.maxTurns) {
+        console.log(`[Chat] continueAfterTools: Max turns reached (${nextTurn}/${msgModelConfig.maxTurns})`);
+        return;
+      }
+
+      // Check if any tools had errors - don't continue if so
+      const hasErrors = message.toolCalls?.some((tc) => tc.result?.isError);
+      if (hasErrors) {
+        console.log('[Chat] continueAfterTools: Tool errors detected, stopping');
+        return;
+      }
+
+      console.log(`[Chat] continueAfterTools: Continuing turn ${nextTurn}/${msgModelConfig.maxTurns}`);
+
+      // Increment turn counter and set processing state
+      dispatch({ type: 'INCREMENT_TURN' });
+      dispatch({ type: 'SET_PROCESSING', isProcessing: true });
+      dispatch({ type: 'UPDATE_MESSAGE', id: messageId, updates: { isStreaming: true } });
+      dispatch({ type: 'SET_STREAMING_MESSAGE', id: messageId });
+
+      try {
+        // Build chat messages including the just-executed tool results
+        const chatMessages: Array<{
+          role: 'user' | 'assistant' | 'tool';
+          content: string | Array<{ type: string; [key: string]: unknown }>;
+        }> = [];
+
+        for (const m of state.messages) {
+          if (m.role === 'system') continue;
+
+          if (m.role === 'user') {
+            if (m.content.trim()) {
+              chatMessages.push({ role: 'user', content: m.content });
+            }
+          } else if (m.role === 'assistant') {
+            const hasToolCalls = m.toolCalls && m.toolCalls.length > 0;
+            const hasText = m.content.trim();
+
+            if (!hasText && !hasToolCalls) continue;
+
+            if (hasToolCalls) {
+              // Only include tool calls that have results (API requires tool_result for every tool_use)
+              const completedCalls = m.toolCalls!.filter((tc) => tc.result);
+
+              const contentParts: Array<{ type: string; [key: string]: unknown }> = [];
+
+              if (hasText) {
+                contentParts.push({ type: 'text', text: m.content });
+              }
+
+              for (const tc of completedCalls) {
+                contentParts.push({
+                  type: 'tool-call',
+                  toolCallId: tc.id,
+                  toolName: tc.qualifiedName,
+                  args: tc.arguments,
+                });
+              }
+
+              // Only add assistant message if there's content
+              if (contentParts.length > 0) {
+                chatMessages.push({ role: 'assistant', content: contentParts });
+              }
+
+              // Add tool result message for completed calls
+              if (completedCalls.length > 0) {
+                const toolResults = completedCalls.map((tc) => ({
+                  type: 'tool-result',
+                  toolCallId: tc.id,
+                  toolName: tc.qualifiedName,
+                  result: tc.result!.content,
+                  isError: tc.result!.isError,
+                }));
+                chatMessages.push({ role: 'tool', content: toolResults });
+              }
+            } else {
+              chatMessages.push({ role: 'assistant', content: m.content });
+            }
+          }
+        }
+
+        // Build MCP context
+        const mcpContext = {
+          servers: state.servers.map((s) => ({ name: s.name, version: s.version })),
+          availableTools: state.tools,
+        };
+
+        // Stream continuation - append to existing message
+        const newToolCalls: ChatToolCall[] = [];
+
+        for await (const event of adapter.streamChat({
+          sessionId: state.sessionId,
+          messages: chatMessages,
+          mcpContext,
+          settings: {
+            provider: msgModelConfig.provider,
+            modelId: msgModelConfig.modelId,
+            temperature: msgModelConfig.temperature,
+            maxTurns: 1, // Single turn per continuation call
+          },
+        })) {
+          handleStreamEvent(event, messageId, newToolCalls, dispatch);
+        }
+
+        // Finalize - append new tool calls to existing ones
+        if (newToolCalls.length > 0) {
+          dispatch({
+            type: 'APPEND_TOOL_CALLS',
+            messageId,
+            toolCalls: newToolCalls,
+          });
+        }
+        dispatch({
+          type: 'UPDATE_MESSAGE',
+          id: messageId,
+          updates: { isStreaming: false },
+        });
+      } catch (err) {
+        console.error('[Chat] continueAfterTools error:', err);
+        dispatch({
+          type: 'APPEND_STREAM',
+          id: messageId,
+          content: `\n\nError continuing: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        });
+        dispatch({
+          type: 'UPDATE_MESSAGE',
+          id: messageId,
+          updates: { isStreaming: false },
+        });
+      } finally {
+        dispatch({ type: 'SET_PROCESSING', isProcessing: false });
+        dispatch({ type: 'SET_STREAMING_MESSAGE', id: null });
+      }
+    },
+    [state.isProcessing, state.messages, state.servers, state.tools, state.sessionId, state.currentTurn, adapter]
+  );
+
   // Keyboard shortcut: Cmd/Ctrl+K to toggle
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -373,6 +655,58 @@ export function ChatProvider({ children }: ChatProviderProps) {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [state.isOpen, toggleDrawer, closeDrawer]);
+
+  // Auto-continue after tools complete (multi-turn workflow)
+  // This watches for the last assistant message with completed tool calls
+  useEffect(() => {
+    // Skip if processing (already continuing or waiting for stream)
+    if (state.isProcessing) return;
+
+    // Find the last assistant message
+    const lastAssistantMsg = [...state.messages].reverse().find((m) => m.role === 'assistant');
+    if (!lastAssistantMsg) return;
+
+    // Skip if streaming
+    if (lastAssistantMsg.isStreaming) return;
+
+    // Skip if no tool calls
+    if (!lastAssistantMsg.toolCalls || lastAssistantMsg.toolCalls.length === 0) return;
+
+    // Check model config for multi-turn
+    const modelConfig = lastAssistantMsg.modelConfig;
+    if (!modelConfig || modelConfig.maxTurns <= 1) return;
+
+    // Check if we've exceeded maxTurns
+    if (state.currentTurn >= modelConfig.maxTurns - 1) {
+      console.log(`[Chat] Auto-continue: Max turns reached (${state.currentTurn + 1}/${modelConfig.maxTurns})`);
+      return;
+    }
+
+    // Check if all tool calls are completed (have results)
+    const allCompleted = lastAssistantMsg.toolCalls.every((tc) => tc.status === 'completed' && tc.result);
+    if (!allCompleted) return;
+
+    // Check for errors - don't continue if any tool failed
+    const hasErrors = lastAssistantMsg.toolCalls.some((tc) => tc.result?.isError);
+    if (hasErrors) {
+      console.log('[Chat] Auto-continue: Stopping due to tool errors');
+      return;
+    }
+
+    // Create a unique key for this continuation attempt (message ID + tool call count + turn)
+    const continuationKey = `${lastAssistantMsg.id}-${lastAssistantMsg.toolCalls.length}-${state.currentTurn}`;
+
+    // Skip if we've already triggered continuation for this state
+    if (continuationTriggeredRef.current.has(continuationKey)) {
+      return;
+    }
+
+    // Mark as triggered before calling to prevent duplicates
+    continuationTriggeredRef.current.add(continuationKey);
+
+    console.log(`[Chat] Auto-continue: Triggering continuation (turn ${state.currentTurn + 1}/${modelConfig.maxTurns})`);
+    continueAfterTools(lastAssistantMsg.id);
+  }, [state.messages, state.isProcessing, state.currentTurn, continueAfterTools]);
 
   // Fetch servers and tools on mount using communication adapter
   useEffect(() => {
@@ -397,6 +731,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
           originalName: t.displayName || t.name,
           serverName: t.serverName || 'default',
           description: t.description,
+          inputSchema: t.inputSchema,
           hasUi: t.hasUi,
           uiResourceUri: t.uiResourceUri,
         }));
@@ -413,6 +748,65 @@ export function ChatProvider({ children }: ChatProviderProps) {
     const unsubscribe = adapter.onEvent((event) => {
       if (event.type === 'tools_changed' || event.type === 'servers_changed') {
         fetchMcpContext();
+      }
+
+      // Handle lifecycle events for individual server status updates
+      if (event.type === 'server_status_changed') {
+        const { serverName, newStatus } = event.payload;
+        dispatch({
+          type: 'UPDATE_SERVER_STATUS',
+          serverName,
+          updates: { status: newStatus as ServerInfo['status'] },
+        });
+      }
+
+      if (event.type === 'server_healthy') {
+        const { serverName } = event.payload;
+        dispatch({
+          type: 'UPDATE_SERVER_STATUS',
+          serverName,
+          updates: {
+            status: 'connected',
+            healthChecksFailed: 0,
+            lastError: undefined,
+          },
+        });
+      }
+
+      if (event.type === 'server_unhealthy') {
+        const { serverName, error } = event.payload;
+        dispatch({
+          type: 'UPDATE_SERVER_STATUS',
+          serverName,
+          updates: {
+            status: 'unhealthy',
+            lastError: error,
+          },
+        });
+      }
+
+      if (event.type === 'server_crashed') {
+        const { serverName, willRestart } = event.payload;
+        dispatch({
+          type: 'UPDATE_SERVER_STATUS',
+          serverName,
+          updates: {
+            status: willRestart ? 'restarting' : 'failed',
+          },
+        });
+      }
+
+      if (event.type === 'server_restarting') {
+        const { serverName, attempt, maxAttempts } = event.payload;
+        dispatch({
+          type: 'UPDATE_SERVER_STATUS',
+          serverName,
+          updates: {
+            status: 'restarting',
+            restartAttempts: attempt,
+            maxRestartAttempts: maxAttempts,
+          },
+        });
       }
     });
 
@@ -434,6 +828,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
     navigateHistory,
     clearMessages,
     newSession,
+    continueAfterTools,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

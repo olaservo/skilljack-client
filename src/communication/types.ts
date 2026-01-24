@@ -18,6 +18,11 @@ import type {
   WebSocketEvent,
   WebConfig,
   ServerWithState,
+  ServerStatusChangedPayload,
+  ServerHealthPayload,
+  ServerCrashedPayload,
+  ServerRestartingPayload,
+  ManagerReadyPayload,
 } from '../shared/types.js';
 
 // ============================================
@@ -38,6 +43,20 @@ export interface CommunicationAdapter {
   setToolEnabled(name: string, enabled: boolean): Promise<{ name: string; enabled: boolean }>;
   getToolManagerServers(): Promise<ServerWithState[]>;
   setServerEnabled(name: string, enabled: boolean): Promise<{ name: string; enabled: boolean }>;
+
+  // Server Configuration
+  getServerConfigs(): Promise<import('../shared/types.js').ServerConfigWithStatus[]>;
+  addServerConfig(config: {
+    name: string;
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+  }): Promise<{ success: boolean }>;
+  updateServerConfig(
+    name: string,
+    config: { command?: string; args?: string[]; env?: Record<string, string>; enabled?: boolean }
+  ): Promise<{ success: boolean }>;
+  removeServerConfig(name: string): Promise<{ success: boolean }>;
 
   // Resources
   getResources(): Promise<ResourceInfo[]>;
@@ -109,6 +128,28 @@ export interface ElectronAPI {
   onServersChanged(callback: () => void): () => void;
   onResourceUpdated(callback: (data: { uri: string; serverName: string }) => void): () => void;
   onConnectionError(callback: (data: { serverName: string; error: string }) => void): () => void;
+
+  // Lifecycle Events
+  onServerStatusChanged(callback: (data: ServerStatusChangedPayload) => void): () => void;
+  onServerHealthy(callback: (data: ServerHealthPayload) => void): () => void;
+  onServerUnhealthy(callback: (data: ServerHealthPayload) => void): () => void;
+  onServerCrashed(callback: (data: ServerCrashedPayload) => void): () => void;
+  onServerRestarting(callback: (data: ServerRestartingPayload) => void): () => void;
+  onManagerReady(callback: (data: ManagerReadyPayload) => void): () => void;
+
+  // Server Configuration
+  getServerConfigs(): Promise<{ servers: import('../shared/types.js').ServerConfigWithStatus[] }>;
+  addServerConfig(config: {
+    name: string;
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+  }): Promise<{ success: boolean }>;
+  updateServerConfig(
+    name: string,
+    config: { command?: string; args?: string[]; env?: Record<string, string>; enabled?: boolean }
+  ): Promise<{ success: boolean }>;
+  removeServerConfig(name: string): Promise<{ success: boolean }>;
 
   // Settings
   getSettings<T>(): Promise<T>;

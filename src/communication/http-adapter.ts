@@ -164,6 +164,51 @@ export function createHTTPAdapter(options: AdapterOptions = {}): CommunicationAd
     },
 
     // ============================================
+    // Server Configuration
+    // ============================================
+
+    async getServerConfigs(): Promise<import('../shared/types.js').ServerConfigWithStatus[]> {
+      const data = await fetchJSON<{ servers: import('../shared/types.js').ServerConfigWithStatus[] }>(
+        '/api/server-config/servers'
+      );
+      return data.servers || [];
+    },
+
+    async addServerConfig(config: {
+      name: string;
+      command: string;
+      args?: string[];
+      env?: Record<string, string>;
+    }): Promise<{ success: boolean }> {
+      return fetchJSON<{ success: boolean }>('/api/server-config/servers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+    },
+
+    async updateServerConfig(
+      name: string,
+      config: { command?: string; args?: string[]; env?: Record<string, string>; enabled?: boolean }
+    ): Promise<{ success: boolean }> {
+      return fetchJSON<{ success: boolean }>(
+        `/api/server-config/servers/${encodeURIComponent(name)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config),
+        }
+      );
+    },
+
+    async removeServerConfig(name: string): Promise<{ success: boolean }> {
+      return fetchJSON<{ success: boolean }>(
+        `/api/server-config/servers/${encodeURIComponent(name)}`,
+        { method: 'DELETE' }
+      );
+    },
+
+    // ============================================
     // Resources
     // ============================================
 

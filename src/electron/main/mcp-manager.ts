@@ -12,7 +12,7 @@
 import { app, BrowserWindow } from 'electron';
 import Store from 'electron-store';
 import log from 'electron-log';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import {
@@ -46,6 +46,8 @@ import type {
   PromptInfo,
   WebConfig,
   ServerWithState,
+  ServerConfigEntry,
+  ServerConfigWithStatus,
 } from '../../shared/types.js';
 
 // ============================================
@@ -142,11 +144,189 @@ class ToolManagerState {
 const TOOL_MANAGER_TOOL: ToolWithUIInfo = {
   name: 'tool-manager__manage-tools',
   displayName: 'manage-tools',
-  description: 'View and enable/disable tools from connected MCP servers',
+  description: 'SHOW or DISPLAY the tool manager UI. Use when user wants to SEE, VIEW, or SHOW available tools. Opens a visual panel to browse and toggle tools on/off.',
   hasUi: true,
   uiResourceUri: 'builtin://tool-manager',
   serverName: 'tool-manager',
 };
+
+const SERVER_CONFIG_TOOL: ToolWithUIInfo = {
+  name: 'server-config__configure-servers',
+  displayName: 'configure-servers',
+  description: 'SHOW or DISPLAY the server configuration UI. Use when user wants to SEE, VIEW, or SHOW server connections. Opens a visual panel to manage servers.',
+  hasUi: true,
+  uiResourceUri: 'builtin://server-config',
+  serverName: 'server-config',
+};
+
+// ============================================
+// Server Config Action Tools (no UI, direct actions)
+// ============================================
+
+const SERVER_LIST_TOOL: ToolWithUIInfo = {
+  name: 'server-config__list-servers',
+  displayName: 'list-servers',
+  description: 'Get server status as text data. Use for checking connection status programmatically. If user wants to SEE/SHOW/VIEW servers visually, use configure-servers instead.',
+  inputSchema: {
+    type: 'object',
+    properties: {},
+    required: [],
+  },
+  hasUi: false,
+  serverName: 'server-config',
+};
+
+const SERVER_ADD_TOOL: ToolWithUIInfo = {
+  name: 'server-config__add-server',
+  displayName: 'add-server',
+  description: 'Add a new MCP server connection. The server will be started automatically after adding.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Unique name for the server (e.g., "filesystem", "github")',
+      },
+      command: {
+        type: 'string',
+        description: 'Command to run (e.g., "npx", "node", "python")',
+      },
+      args: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Command arguments (e.g., ["-y", "@modelcontextprotocol/server-filesystem", "/home"])',
+      },
+      env: {
+        type: 'object',
+        additionalProperties: { type: 'string' },
+        description: 'Environment variables (e.g., {"GITHUB_TOKEN": "..."})',
+      },
+    },
+    required: ['name', 'command'],
+  },
+  hasUi: false,
+  serverName: 'server-config',
+};
+
+const SERVER_REMOVE_TOOL: ToolWithUIInfo = {
+  name: 'server-config__remove-server',
+  displayName: 'remove-server',
+  description: 'Remove an MCP server from the configuration. The server will be disconnected.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Name of the server to remove',
+      },
+    },
+    required: ['name'],
+  },
+  hasUi: false,
+  serverName: 'server-config',
+};
+
+const SERVER_RESTART_TOOL: ToolWithUIInfo = {
+  name: 'server-config__restart-server',
+  displayName: 'restart-server',
+  description: 'Restart an MCP server. Useful when a server becomes unresponsive or after configuration changes.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Name of the server to restart',
+      },
+    },
+    required: ['name'],
+  },
+  hasUi: false,
+  serverName: 'server-config',
+};
+
+const SERVER_STOP_TOOL: ToolWithUIInfo = {
+  name: 'server-config__stop-server',
+  displayName: 'stop-server',
+  description: 'Stop a running MCP server. The server can be started again later.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Name of the server to stop',
+      },
+    },
+    required: ['name'],
+  },
+  hasUi: false,
+  serverName: 'server-config',
+};
+
+const SERVER_START_TOOL: ToolWithUIInfo = {
+  name: 'server-config__start-server',
+  displayName: 'start-server',
+  description: 'Start a stopped MCP server.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Name of the server to start',
+      },
+    },
+    required: ['name'],
+  },
+  hasUi: false,
+  serverName: 'server-config',
+};
+
+const SERVER_ENABLE_TOOL: ToolWithUIInfo = {
+  name: 'server-config__enable-server',
+  displayName: 'enable-server',
+  description: 'Enable a disabled MCP server. When enabled, the server\'s tools become available for use.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Name of the server to enable',
+      },
+    },
+    required: ['name'],
+  },
+  hasUi: false,
+  serverName: 'server-config',
+};
+
+const SERVER_DISABLE_TOOL: ToolWithUIInfo = {
+  name: 'server-config__disable-server',
+  displayName: 'disable-server',
+  description: 'Disable an MCP server. When disabled, the server\'s tools will not be available for use.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      name: {
+        type: 'string',
+        description: 'Name of the server to disable',
+      },
+    },
+    required: ['name'],
+  },
+  hasUi: false,
+  serverName: 'server-config',
+};
+
+// All server-config action tools
+const SERVER_CONFIG_ACTION_TOOLS: ToolWithUIInfo[] = [
+  SERVER_LIST_TOOL,
+  SERVER_ADD_TOOL,
+  SERVER_REMOVE_TOOL,
+  SERVER_RESTART_TOOL,
+  SERVER_STOP_TOOL,
+  SERVER_START_TOOL,
+  SERVER_ENABLE_TOOL,
+  SERVER_DISABLE_TOOL,
+];
 
 // ============================================
 // MCP Manager Class
@@ -326,7 +506,7 @@ export class McpManager {
       const state = states.find((st) => st.name === s.name);
       return {
         name: s.name,
-        version: s.serverVersion?.name,
+        version: s.serverVersion?.version,
         status: state?.status ?? 'disconnected',
         toolCount: s.toolCount,
         healthy: state?.healthy,
@@ -359,8 +539,13 @@ export class McpManager {
       toolsWithUI = toolsWithUI.filter((t) => t.hasUi);
     }
 
-    // Add tool-manager and filter disabled tools
-    return [TOOL_MANAGER_TOOL, ...this.toolState.filterEnabledTools(toolsWithUI)];
+    // Add built-in tools and filter disabled tools
+    return [
+      TOOL_MANAGER_TOOL,
+      SERVER_CONFIG_TOOL,
+      ...SERVER_CONFIG_ACTION_TOOLS,
+      ...this.toolState.filterEnabledTools(toolsWithUI),
+    ];
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<ToolCallResult> {
@@ -370,6 +555,204 @@ export class McpManager {
         content: [{ type: 'text', text: 'Tool manager opened.' }],
         serverName: 'tool-manager',
       };
+    }
+
+    // Handle built-in server-config
+    if (name === 'server-config__configure-servers') {
+      return {
+        content: [{ type: 'text', text: 'Server configuration opened.' }],
+        serverName: 'server-config',
+      };
+    }
+
+    // Handle server-config action tools
+    if (name === 'server-config__list-servers') {
+      const servers = await this.getServerConfigs();
+      const summary = servers.map(s =>
+        `- **${s.name}**: ${s.status} (${s.toolCount} tools)${s.lastError ? ` - Error: ${s.lastError}` : ''}`
+      ).join('\n');
+      return {
+        content: [{
+          type: 'text',
+          text: servers.length > 0
+            ? `## Connected Servers\n\n${summary}`
+            : 'No servers configured. Use add-server to add one.'
+        }],
+        serverName: 'server-config',
+      };
+    }
+
+    if (name === 'server-config__add-server') {
+      const { name: serverName, command, args: serverArgs, env } = args as {
+        name: string;
+        command: string;
+        args?: string[];
+        env?: Record<string, string>;
+      };
+      if (!serverName || !command) {
+        return {
+          content: [{ type: 'text', text: `Missing required parameter: ${!serverName ? 'name' : 'command'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+      try {
+        await this.addServerConfig({ name: serverName, command, args: serverArgs, env });
+        return {
+          content: [{ type: 'text', text: `Server "${serverName}" added and starting...` }],
+          serverName: 'server-config',
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Failed to add server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+    }
+
+    if (name === 'server-config__remove-server') {
+      const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+      try {
+        await this.removeServerConfig(serverName);
+        return {
+          content: [{ type: 'text', text: `Server "${serverName}" removed.` }],
+          serverName: 'server-config',
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Failed to remove server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+    }
+
+    if (name === 'server-config__restart-server') {
+      const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+      try {
+        await this.restartServer(serverName);
+        return {
+          content: [{ type: 'text', text: `Server "${serverName}" is restarting...` }],
+          serverName: 'server-config',
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Failed to restart server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+    }
+
+    if (name === 'server-config__stop-server') {
+      const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+      try {
+        await this.stopServer(serverName);
+        return {
+          content: [{ type: 'text', text: `Server "${serverName}" stopped.` }],
+          serverName: 'server-config',
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Failed to stop server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+    }
+
+    if (name === 'server-config__start-server') {
+      const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+      try {
+        await this.startServer(serverName);
+        return {
+          content: [{ type: 'text', text: `Server "${serverName}" starting...` }],
+          serverName: 'server-config',
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Failed to start server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+    }
+
+    if (name === 'server-config__enable-server') {
+      const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+      try {
+        this.setServerEnabled(serverName, true);
+        return {
+          content: [{ type: 'text', text: `Server "${serverName}" has been enabled. Its tools are now available.` }],
+          serverName: 'server-config',
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Failed to enable server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+    }
+
+    if (name === 'server-config__disable-server') {
+      const { name: serverName } = args as { name: string };
+      if (!serverName) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+      try {
+        this.setServerEnabled(serverName, false);
+        return {
+          content: [{ type: 'text', text: `Server "${serverName}" has been disabled. Its tools are no longer available.` }],
+          serverName: 'server-config',
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Failed to disable server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
     }
 
     const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
@@ -481,6 +864,41 @@ export class McpManager {
       }
     }
 
+    // Handle built-in server-config UI
+    if (serverName === 'server-config' && uri === 'builtin://server-config') {
+      try {
+        const appPath = app.getAppPath();
+        const possiblePaths = [
+          // Development: relative to app root
+          join(appPath, 'src/web/static/server-config/mcp-app.html'),
+          // Production: in resources folder
+          join(appPath, 'resources/server-config/mcp-app.html'),
+          // Fallback: relative to __dirname
+          join(__dirname, '../../web/static/server-config/mcp-app.html'),
+          join(__dirname, '../../../src/web/static/server-config/mcp-app.html'),
+        ];
+
+        for (const htmlPath of possiblePaths) {
+          if (existsSync(htmlPath)) {
+            const html = await readFile(htmlPath, 'utf-8');
+            log.info('[McpManager] Loaded server-config UI from:', htmlPath);
+            return {
+              uri,
+              mimeType: 'text/html;mcp-app',
+              text: html,
+              serverName: 'server-config',
+            };
+          }
+        }
+
+        log.warn('[McpManager] Server-config UI not found. Tried paths:', possiblePaths);
+        return null;
+      } catch (err) {
+        log.error('[McpManager] Failed to load server-config UI:', err);
+        return null;
+      }
+    }
+
     const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
     const client = clients.get(serverName);
     if (!client) {
@@ -512,6 +930,177 @@ export class McpManager {
       arguments: p.arguments,
       serverName: p.serverName,
     }));
+  }
+
+  // ============================================
+  // Server Configuration
+  // ============================================
+
+  /**
+   * Get all server configurations with their current status
+   */
+  async getServerConfigs(): Promise<ServerConfigWithStatus[]> {
+    const configPath = store.get('configPath');
+    if (!configPath || !existsSync(configPath)) {
+      return [];
+    }
+
+    try {
+      const content = await readFile(configPath, 'utf-8');
+      const config = JSON.parse(content) as { mcpServers?: Record<string, unknown> };
+      const servers = config.mcpServers || {};
+      const states = this.lifecycleManager?.getAllServerStates() ?? [];
+      const serverSummary = await this.getServers();
+
+      return Object.entries(servers).map(([name, serverConfig]) => {
+        const cfg = serverConfig as { command?: string; args?: string[]; env?: Record<string, string> };
+        const state = states.find((s) => s.name === name);
+        const summary = serverSummary.find((s) => s.name === name);
+
+        return {
+          name,
+          transport: 'stdio' as const,
+          command: cfg.command || '',
+          args: cfg.args,
+          env: cfg.env,
+          enabled: this.toolState.isServerEnabled(name),
+          status: state?.status ?? 'disconnected',
+          toolCount: summary?.toolCount ?? 0,
+          healthy: state?.healthy ?? false,
+          lastError: state?.error,
+        };
+      });
+    } catch (error) {
+      log.error('Failed to read server configs:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Add a new server to the configuration
+   */
+  async addServerConfig(config: {
+    name: string;
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+  }): Promise<void> {
+    const configPath = store.get('configPath');
+    if (!configPath) {
+      throw new Error('No configuration file path set');
+    }
+
+    // Read current config
+    let fileConfig: { mcpServers?: Record<string, unknown> } = { mcpServers: {} };
+    if (existsSync(configPath)) {
+      const content = await readFile(configPath, 'utf-8');
+      fileConfig = JSON.parse(content);
+    }
+
+    // Check for duplicate
+    if (fileConfig.mcpServers && fileConfig.mcpServers[config.name]) {
+      throw new Error(`Server '${config.name}' already exists`);
+    }
+
+    // Add new server
+    fileConfig.mcpServers = fileConfig.mcpServers || {};
+    fileConfig.mcpServers[config.name] = {
+      transport: 'stdio',
+      command: config.command,
+      args: config.args || [],
+      env: config.env,
+    };
+
+    // Write back
+    await writeFile(configPath, JSON.stringify(fileConfig, null, 2), 'utf-8');
+    log.info(`Added server config: ${config.name}`);
+
+    // Reload configuration to connect new server
+    await this.loadConfig(configPath);
+  }
+
+  /**
+   * Update an existing server configuration
+   */
+  async updateServerConfig(
+    name: string,
+    config: {
+      command?: string;
+      args?: string[];
+      env?: Record<string, string>;
+      enabled?: boolean;
+    }
+  ): Promise<void> {
+    const configPath = store.get('configPath');
+    if (!configPath || !existsSync(configPath)) {
+      throw new Error('No configuration file found');
+    }
+
+    // Handle enabled state separately (it's stored in electron-store, not servers.json)
+    if (config.enabled !== undefined) {
+      this.toolState.setServerEnabled(name, config.enabled);
+    }
+
+    // If only changing enabled state, no need to modify the config file
+    if (config.command === undefined && config.args === undefined && config.env === undefined) {
+      return;
+    }
+
+    // Read current config
+    const content = await readFile(configPath, 'utf-8');
+    const fileConfig = JSON.parse(content) as { mcpServers?: Record<string, unknown> };
+
+    if (!fileConfig.mcpServers || !fileConfig.mcpServers[name]) {
+      throw new Error(`Server '${name}' not found`);
+    }
+
+    const existing = fileConfig.mcpServers[name] as Record<string, unknown>;
+
+    // Update fields
+    if (config.command !== undefined) {
+      existing.command = config.command;
+    }
+    if (config.args !== undefined) {
+      existing.args = config.args;
+    }
+    if (config.env !== undefined) {
+      existing.env = config.env;
+    }
+
+    // Write back
+    await writeFile(configPath, JSON.stringify(fileConfig, null, 2), 'utf-8');
+    log.info(`Updated server config: ${name}`);
+
+    // Reload configuration to apply changes
+    await this.loadConfig(configPath);
+  }
+
+  /**
+   * Remove a server from the configuration
+   */
+  async removeServerConfig(name: string): Promise<void> {
+    const configPath = store.get('configPath');
+    if (!configPath || !existsSync(configPath)) {
+      throw new Error('No configuration file found');
+    }
+
+    // Read current config
+    const content = await readFile(configPath, 'utf-8');
+    const fileConfig = JSON.parse(content) as { mcpServers?: Record<string, unknown> };
+
+    if (!fileConfig.mcpServers || !fileConfig.mcpServers[name]) {
+      throw new Error(`Server '${name}' not found`);
+    }
+
+    // Remove server
+    delete fileConfig.mcpServers[name];
+
+    // Write back
+    await writeFile(configPath, JSON.stringify(fileConfig, null, 2), 'utf-8');
+    log.info(`Removed server config: ${name}`);
+
+    // Reload configuration
+    await this.loadConfig(configPath);
   }
 
   // ============================================

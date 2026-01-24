@@ -308,6 +308,147 @@ export function McpAppPanel({ panel, onClose, isActive = true }: McpAppPanelProp
             );
           }
         }
+
+        // ============================================
+        // Server Config specific JSON-RPC methods
+        // ============================================
+
+        // Get server configurations with status
+        if (data.method === 'server-config/getServers' && data.id) {
+          try {
+            const servers = await adapter.getServerConfigs();
+            sendToApp(createJsonRpcResponse(data.id, { servers }));
+          } catch (error) {
+            console.error('[McpAppPanel] server-config/getServers error:', error);
+            sendToApp(
+              createJsonRpcError(data.id, -32603, 'Failed to get server configs')
+            );
+          }
+        }
+
+        // Add a new server
+        if (data.method === 'server-config/addServer' && data.id) {
+          try {
+            const { name, command, args, env } = data.params;
+            const result = await adapter.addServerConfig({ name, command, args, env });
+            sendToApp(createJsonRpcResponse(data.id, result));
+          } catch (error) {
+            console.error('[McpAppPanel] server-config/addServer error:', error);
+            sendToApp(
+              createJsonRpcError(data.id, -32603, error instanceof Error ? error.message : 'Failed to add server')
+            );
+          }
+        }
+
+        // Update server configuration
+        if (data.method === 'server-config/updateServer' && data.id) {
+          try {
+            const { name, command, args, env, enabled } = data.params;
+            const result = await adapter.updateServerConfig(name, { command, args, env, enabled });
+            sendToApp(createJsonRpcResponse(data.id, result));
+          } catch (error) {
+            console.error('[McpAppPanel] server-config/updateServer error:', error);
+            sendToApp(
+              createJsonRpcError(data.id, -32603, error instanceof Error ? error.message : 'Failed to update server')
+            );
+          }
+        }
+
+        // Remove server configuration
+        if (data.method === 'server-config/removeServer' && data.id) {
+          try {
+            const { name } = data.params;
+            const result = await adapter.removeServerConfig(name);
+            sendToApp(createJsonRpcResponse(data.id, result));
+          } catch (error) {
+            console.error('[McpAppPanel] server-config/removeServer error:', error);
+            sendToApp(
+              createJsonRpcError(data.id, -32603, error instanceof Error ? error.message : 'Failed to remove server')
+            );
+          }
+        }
+
+        // Set server enabled state (reuse from tool-manager pattern but for server-config)
+        if (data.method === 'server-config/setServerEnabled' && data.id) {
+          try {
+            const { name, enabled } = data.params;
+            const result = await adapter.updateServerConfig(name, { enabled });
+            sendToApp(createJsonRpcResponse(data.id, result));
+          } catch (error) {
+            console.error('[McpAppPanel] server-config/setServerEnabled error:', error);
+            sendToApp(
+              createJsonRpcError(data.id, -32603, 'Failed to update server enabled state')
+            );
+          }
+        }
+
+        // Restart server
+        if (data.method === 'server-config/restartServer' && data.id) {
+          try {
+            const { name } = data.params || {};
+            if (!name) {
+              sendToApp(createJsonRpcError(data.id, -32602, 'Missing required parameter: name'));
+              return;
+            }
+            // Note: restartServer is exposed through window.electronAPI but not through the adapter yet
+            // For now, we'll use the direct electronAPI if available
+            if (window.electronAPI && 'restartServer' in window.electronAPI) {
+              await (window.electronAPI as { restartServer: (name: string) => Promise<void> }).restartServer(name);
+              sendToApp(createJsonRpcResponse(data.id, { success: true }));
+            } else {
+              sendToApp(createJsonRpcError(data.id, -32603, 'Restart not available'));
+            }
+          } catch (error) {
+            console.error('[McpAppPanel] server-config/restartServer error:', error);
+            sendToApp(
+              createJsonRpcError(data.id, -32603, 'Failed to restart server')
+            );
+          }
+        }
+
+        // Stop server
+        if (data.method === 'server-config/stopServer' && data.id) {
+          try {
+            const { name } = data.params || {};
+            if (!name) {
+              sendToApp(createJsonRpcError(data.id, -32602, 'Missing required parameter: name'));
+              return;
+            }
+            if (window.electronAPI && 'stopServer' in window.electronAPI) {
+              await (window.electronAPI as { stopServer: (name: string) => Promise<void> }).stopServer(name);
+              sendToApp(createJsonRpcResponse(data.id, { success: true }));
+            } else {
+              sendToApp(createJsonRpcError(data.id, -32603, 'Stop not available'));
+            }
+          } catch (error) {
+            console.error('[McpAppPanel] server-config/stopServer error:', error);
+            sendToApp(
+              createJsonRpcError(data.id, -32603, 'Failed to stop server')
+            );
+          }
+        }
+
+        // Start server
+        if (data.method === 'server-config/startServer' && data.id) {
+          try {
+            const { name } = data.params || {};
+            if (!name) {
+              sendToApp(createJsonRpcError(data.id, -32602, 'Missing required parameter: name'));
+              return;
+            }
+            if (window.electronAPI && 'startServer' in window.electronAPI) {
+              await (window.electronAPI as { startServer: (name: string) => Promise<void> }).startServer(name);
+              sendToApp(createJsonRpcResponse(data.id, { success: true }));
+            } else {
+              sendToApp(createJsonRpcError(data.id, -32603, 'Start not available'));
+            }
+          } catch (error) {
+            console.error('[McpAppPanel] server-config/startServer error:', error);
+            sendToApp(
+              createJsonRpcError(data.id, -32603, 'Failed to start server')
+            );
+          }
+        }
       }
     };
 
