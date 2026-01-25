@@ -20,8 +20,9 @@
  */
 
 import { createHash } from 'crypto';
+import { execSync } from 'child_process';
 import { zipSync } from 'fflate';
-import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, rmSync } from 'fs';
 import { join, basename, relative, resolve, sep } from 'path';
 
 // ANSI colors for terminal output
@@ -49,41 +50,91 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
 }
 
-// Default patterns to exclude (from mcpb-reference)
+// Default patterns to exclude (from mcpb-reference + additions)
 const EXCLUDE_PATTERNS = [
+  // OS files
   '.DS_Store',
   'Thumbs.db',
-  '.gitignore',
+
+  // Git
   '.git',
+  '.gitignore',
+  '.gitattributes',
+
+  // MCPB
   '.mcpbignore',
-  '*.log',
-  '.env*',
+  '*.mcpb',
+
+  // Dependencies - only exclude caches and lockfiles
+  'node_modules/.cache',
+  'node_modules/.bin',
+  'node_modules/.package-lock.json',
+  'pnpm-lock.yaml',
+  'package-lock.json',
+  'yarn.lock',
+  '.pnp.*',
+  '.yarn',
   '.npm',
   '.npmrc',
   '.yarnrc',
-  '.yarn',
+
+  // Test & coverage
+  '__tests__',
+  'test',
+  'tests',
+  '*.test.js',
+  '*.test.ts',
+  '*.spec.js',
+  '*.spec.ts',
+  'coverage',
+  '.nyc_output',
+  '.nycrc',
+  'jest.config.*',
+  'vitest.config.*',
+
+  // TypeScript source (keep only dist)
+  '*.ts',
+  '!*.d.ts',  // Keep declaration files
+  'tsconfig.json',
+  'tsconfig.*.json',
+  '*.tsbuildinfo',
+
+  // Build tools & config
   '.eslintrc*',
-  '.editorconfig',
+  '.eslintignore',
   '.prettierrc*',
   '.prettierignore',
-  '.eslintignore',
-  '.nycrc',
+  '.editorconfig',
   '.babelrc',
-  '.pnp.*',
-  'node_modules/.cache',
-  'node_modules/.bin',
-  '*.map',
-  '.env.local',
-  '.env.*.local',
+  'babel.config.*',
+  'webpack.config.*',
+  'rollup.config.*',
+  'vite.config.*',
+
+  // Logs & env
+  '*.log',
+  '.env*',
   'npm-debug.log*',
   'yarn-debug.log*',
   'yarn-error.log*',
-  'package-lock.json',
-  'yarn.lock',
-  '*.mcpb',
-  '*.d.ts',
-  '*.tsbuildinfo',
-  'tsconfig.json',
+
+  // Source maps
+  '*.map',
+
+  // IDE & editor
+  '.vscode',
+  '.idea',
+  '.claude',
+
+  // Documentation (optional - can override in .mcpbignore)
+  'CONTRIBUTING.md',
+  'CHANGELOG.md',
+  'AGENTS.md',
+
+  // Docker (not needed in bundle)
+  'Dockerfile',
+  'docker-compose.yml',
+  '.dockerignore',
 ];
 
 /**
@@ -110,25 +161,28 @@ function readMcpbIgnorePatterns(baseDir) {
 function shouldExclude(relativePath, additionalPatterns = []) {
   const allPatterns = [...EXCLUDE_PATTERNS, ...additionalPatterns];
   const normalizedPath = relativePath.replace(/\\/g, '/');
+  const baseName = basename(normalizedPath);
 
   for (const pattern of allPatterns) {
+    // Remove trailing slash for directory patterns
+    const cleanPattern = pattern.endsWith('/') ? pattern.slice(0, -1) : pattern;
+
     // Exact match
-    if (normalizedPath === pattern) return true;
+    if (normalizedPath === cleanPattern) return true;
 
     // Basename match (e.g., ".git" matches "foo/.git")
-    const baseName = basename(normalizedPath);
-    if (baseName === pattern) return true;
+    if (baseName === cleanPattern) return true;
+
+    // Directory prefix match (e.g., "evals" matches "evals/logs/foo.json")
+    if (normalizedPath.startsWith(cleanPattern + '/')) return true;
 
     // Glob patterns (simple implementation)
-    if (pattern.includes('*')) {
+    if (cleanPattern.includes('*')) {
       const regex = new RegExp(
-        '^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$'
+        '^' + cleanPattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$'
       );
       if (regex.test(normalizedPath) || regex.test(baseName)) return true;
     }
-
-    // Directory pattern (e.g., "node_modules/.cache" matches prefix)
-    if (normalizedPath.startsWith(pattern + '/')) return true;
   }
 
   return false;
@@ -202,9 +256,10 @@ function validateManifest(manifest) {
 /**
  * Main packing function
  */
-function packMcpb(sourceDir, outputPath) {
+function packMcpb(sourceDir, outputPath, options = {}) {
   // Resolve paths
   const resolvedSourceDir = resolve(sourceDir);
+  const { install: shouldInstall } = options;
 
   // Check source directory exists
   if (!existsSync(resolvedSourceDir)) {
@@ -237,6 +292,29 @@ function packMcpb(sourceDir, outputPath) {
       log(`  - ${err}`, colors.red);
     }
     process.exit(1);
+  }
+
+  // Install production dependencies if requested
+  if (shouldInstall) {
+    log(`\nInstalling production dependencies...`, colors.blue);
+    try {
+      // Remove existing node_modules to get clean install
+      const nodeModulesPath = join(resolvedSourceDir, 'node_modules');
+      if (existsSync(nodeModulesPath)) {
+        log(`  Removing existing node_modules...`, colors.dim);
+        rmSync(nodeModulesPath, { recursive: true, force: true });
+      }
+
+      // Run npm install --production (skip scripts to avoid build steps)
+      log(`  Running npm install --omit=dev --ignore-scripts...`, colors.dim);
+      execSync('npm install --omit=dev --ignore-scripts', {
+        cwd: resolvedSourceDir,
+        stdio: 'pipe',
+      });
+      log(`  Dependencies installed`, colors.green);
+    } catch (e) {
+      error(`Failed to install dependencies: ${e.message}`);
+    }
   }
 
   // Determine output path
@@ -316,15 +394,20 @@ if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
 MCPB Packer - Create MCP Bundle files
 
 Usage:
-  node scripts/pack-mcpb.js <source-dir> [output-file]
-  npm run pack-mcpb <source-dir> [output-file]
+  node scripts/pack-mcpb.js [options] <source-dir> [output-file]
+  npm run pack-mcpb -- [options] <source-dir> [output-file]
 
 Arguments:
   source-dir   Directory containing manifest.json and server files
   output-file  Output .mcpb file path (default: <name>-<version>.mcpb)
 
+Options:
+  --install    Run npm install --omit=dev before packing (clean prod deps)
+  --help, -h   Show this help message
+
 Example:
   node scripts/pack-mcpb.js ./my-mcp-server
+  node scripts/pack-mcpb.js --install ./my-mcp-server
   node scripts/pack-mcpb.js ./servers/weather ./dist/weather-server.mcpb
 
 Features:
@@ -333,6 +416,7 @@ Features:
   - Preserves Unix file permissions
   - Maximum compression (level 9)
   - SHA1 checksum output
+  - Optional clean npm install for production deps
 
 The source directory must contain a valid manifest.json.
 See scripts/manifest-template.json for an example.
@@ -340,7 +424,14 @@ See scripts/manifest-template.json for an example.
   process.exit(0);
 }
 
-const sourceDir = args[0];
-const outputPath = args[1];
+// Parse arguments
+const install = args.includes('--install');
+const positionalArgs = args.filter(a => !a.startsWith('--'));
+const sourceDir = positionalArgs[0];
+const outputPath = positionalArgs[1];
 
-packMcpb(sourceDir, outputPath);
+if (!sourceDir) {
+  error('Missing required argument: source-dir');
+}
+
+packMcpb(sourceDir, outputPath, { install });
