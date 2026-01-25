@@ -152,8 +152,14 @@ function reducer(state: McpAppState, action: McpAppAction): McpAppState {
       };
     }
 
-    case 'SET_LAYOUT_MODE':
-      return { ...state, layoutMode: action.mode };
+    case 'SET_LAYOUT_MODE': {
+      // When switching to tabs mode, ensure activeTabKey is set
+      let newActiveTabKey = state.activeTabKey;
+      if (action.mode === 'tabs' && !state.activeTabKey && state.panels.size > 0) {
+        newActiveTabKey = Array.from(state.panels.keys())[0];
+      }
+      return { ...state, layoutMode: action.mode, activeTabKey: newActiveTabKey };
+    }
 
     case 'SET_ACTIVE_TAB':
       return { ...state, activeTabKey: action.key };

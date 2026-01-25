@@ -498,6 +498,23 @@
     </div>
   </div>
 
+  <!-- Confirm Modal -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal" style="max-width: 400px;">
+      <div class="modal-header">
+        <h2>Confirm</h2>
+        <button class="modal-close" onclick="closeConfirmModal(false)">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-message"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeConfirmModal(false)">Cancel</button>
+        <button class="btn btn-primary" id="confirm-yes" onclick="closeConfirmModal(true)">Yes, Remove</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast notification -->
   <div class="toast" id="toast"></div>
 
@@ -520,7 +537,11 @@
     const serverList = document.getElementById('server-list');
     const stats = document.getElementById('stats');
     const modal = document.getElementById('modal');
+    const confirmModal = document.getElementById('confirm-modal');
     const toast = document.getElementById('toast');
+
+    // Confirm modal state
+    let confirmCallback = null;
 
     // ============================================
     // JSON-RPC Communication
@@ -631,7 +652,8 @@
     }
 
     async function removeServer(name) {
-      if (!confirm(`Are you sure you want to remove "${name}"?`)) return;
+      const confirmed = await showConfirmModal(`Are you sure you want to remove "${name}"?`);
+      if (!confirmed) return;
 
       try {
         if (useJsonRpc) {
@@ -852,6 +874,22 @@
     function closeModal() {
       modal.classList.remove('active');
       editingServer = null;
+    }
+
+    function showConfirmModal(message) {
+      return new Promise((resolve) => {
+        document.getElementById('confirm-message').textContent = message;
+        confirmCallback = resolve;
+        confirmModal.classList.add('active');
+      });
+    }
+
+    function closeConfirmModal(result) {
+      confirmModal.classList.remove('active');
+      if (confirmCallback) {
+        confirmCallback(result);
+        confirmCallback = null;
+      }
     }
 
     async function submitForm() {

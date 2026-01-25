@@ -87,15 +87,24 @@ export function McpAppPanelsContainer() {
 
       {/* Tab Bar (only shown in tabs mode) */}
       {layoutMode === 'tabs' && (
-        <div className="mcp-app-tabs">
+        <div className="mcp-app-tabs" role="tablist">
           {panels.map((panel) => {
             const toolName =
               panel.uiResourceUri.split('/').pop() || panel.uiResourceUri;
             return (
-              <button
+              <div
                 key={panel.key}
                 className={`mcp-app-tab ${activeTabKey === panel.key ? 'active' : ''}`}
                 onClick={() => setActiveTab(panel.key)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setActiveTab(panel.key);
+                  }
+                }}
+                role="tab"
+                tabIndex={0}
+                aria-selected={activeTabKey === panel.key}
               >
                 <span className="mcp-tab-label">
                   {toolName} ({panel.serverName})
@@ -110,7 +119,7 @@ export function McpAppPanelsContainer() {
                 >
                   &times;
                 </button>
-              </button>
+              </div>
             );
           })}
         </div>
