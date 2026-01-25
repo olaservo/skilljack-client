@@ -48,6 +48,7 @@ import type {
   ServerWithState,
   ServerConfigEntry,
   ServerConfigWithStatus,
+  ContentAnnotations,
 } from '../../shared/types.js';
 
 // ============================================
@@ -148,6 +149,10 @@ const TOOL_MANAGER_TOOL: ToolWithUIInfo = {
   hasUi: true,
   uiResourceUri: 'builtin://tool-manager',
   serverName: 'tool-manager',
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
 };
 
 const SERVER_CONFIG_TOOL: ToolWithUIInfo = {
@@ -157,6 +162,10 @@ const SERVER_CONFIG_TOOL: ToolWithUIInfo = {
   hasUi: true,
   uiResourceUri: 'builtin://server-config',
   serverName: 'server-config',
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
 };
 
 // ============================================
@@ -174,6 +183,10 @@ const SERVER_LIST_TOOL: ToolWithUIInfo = {
   },
   hasUi: false,
   serverName: 'server-config',
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
 };
 
 const SERVER_ADD_TOOL: ToolWithUIInfo = {
@@ -206,6 +219,12 @@ const SERVER_ADD_TOOL: ToolWithUIInfo = {
   },
   hasUi: false,
   serverName: 'server-config',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  },
 };
 
 const SERVER_REMOVE_TOOL: ToolWithUIInfo = {
@@ -224,6 +243,12 @@ const SERVER_REMOVE_TOOL: ToolWithUIInfo = {
   },
   hasUi: false,
   serverName: 'server-config',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
 };
 
 const SERVER_RESTART_TOOL: ToolWithUIInfo = {
@@ -242,6 +267,12 @@ const SERVER_RESTART_TOOL: ToolWithUIInfo = {
   },
   hasUi: false,
   serverName: 'server-config',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
 };
 
 const SERVER_STOP_TOOL: ToolWithUIInfo = {
@@ -260,6 +291,12 @@ const SERVER_STOP_TOOL: ToolWithUIInfo = {
   },
   hasUi: false,
   serverName: 'server-config',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
 };
 
 const SERVER_START_TOOL: ToolWithUIInfo = {
@@ -278,6 +315,12 @@ const SERVER_START_TOOL: ToolWithUIInfo = {
   },
   hasUi: false,
   serverName: 'server-config',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
 };
 
 const SERVER_ENABLE_TOOL: ToolWithUIInfo = {
@@ -296,6 +339,12 @@ const SERVER_ENABLE_TOOL: ToolWithUIInfo = {
   },
   hasUi: false,
   serverName: 'server-config',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
 };
 
 const SERVER_DISABLE_TOOL: ToolWithUIInfo = {
@@ -314,6 +363,12 @@ const SERVER_DISABLE_TOOL: ToolWithUIInfo = {
   },
   hasUi: false,
   serverName: 'server-config',
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  },
 };
 
 // All server-config action tools
@@ -552,7 +607,7 @@ export class McpManager {
     // Handle built-in tool-manager
     if (name === 'tool-manager__manage-tools') {
       return {
-        content: [{ type: 'text', text: 'Tool manager opened.' }],
+        content: [{ type: 'text', text: 'Tool manager opened.', annotations: { audience: ['user'], priority: 0.7 } }],
         serverName: 'tool-manager',
       };
     }
@@ -560,7 +615,7 @@ export class McpManager {
     // Handle built-in server-config
     if (name === 'server-config__configure-servers') {
       return {
-        content: [{ type: 'text', text: 'Server configuration opened.' }],
+        content: [{ type: 'text', text: 'Server configuration opened.', annotations: { audience: ['user'], priority: 0.7 } }],
         serverName: 'server-config',
       };
     }
@@ -576,7 +631,8 @@ export class McpManager {
           type: 'text',
           text: servers.length > 0
             ? `## Connected Servers\n\n${summary}`
-            : 'No servers configured. Use add-server to add one.'
+            : 'No servers configured. Use add-server to add one.',
+          annotations: { audience: ['assistant'], priority: 0.7 },
         }],
         serverName: 'server-config',
       };
@@ -591,7 +647,7 @@ export class McpManager {
       };
       if (!serverName || !command) {
         return {
-          content: [{ type: 'text', text: `Missing required parameter: ${!serverName ? 'name' : 'command'}` }],
+          content: [{ type: 'text', text: `Missing required parameter: ${!serverName ? 'name' : 'command'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -599,12 +655,12 @@ export class McpManager {
       try {
         await this.addServerConfig({ name: serverName, command, args: serverArgs, env });
         return {
-          content: [{ type: 'text', text: `Server "${serverName}" added and starting...` }],
+          content: [{ type: 'text', text: `Server "${serverName}" added and starting...`, annotations: { audience: ['user'], priority: 0.7 } }],
           serverName: 'server-config',
         };
       } catch (err) {
         return {
-          content: [{ type: 'text', text: `Failed to add server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          content: [{ type: 'text', text: `Failed to add server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -615,7 +671,7 @@ export class McpManager {
       const { name: serverName } = args as { name: string };
       if (!serverName) {
         return {
-          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -623,12 +679,12 @@ export class McpManager {
       try {
         await this.removeServerConfig(serverName);
         return {
-          content: [{ type: 'text', text: `Server "${serverName}" removed.` }],
+          content: [{ type: 'text', text: `Server "${serverName}" removed.`, annotations: { audience: ['user'], priority: 0.7 } }],
           serverName: 'server-config',
         };
       } catch (err) {
         return {
-          content: [{ type: 'text', text: `Failed to remove server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          content: [{ type: 'text', text: `Failed to remove server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -639,7 +695,7 @@ export class McpManager {
       const { name: serverName } = args as { name: string };
       if (!serverName) {
         return {
-          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -647,12 +703,12 @@ export class McpManager {
       try {
         await this.restartServer(serverName);
         return {
-          content: [{ type: 'text', text: `Server "${serverName}" is restarting...` }],
+          content: [{ type: 'text', text: `Server "${serverName}" is restarting...`, annotations: { audience: ['user'], priority: 0.7 } }],
           serverName: 'server-config',
         };
       } catch (err) {
         return {
-          content: [{ type: 'text', text: `Failed to restart server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          content: [{ type: 'text', text: `Failed to restart server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -663,7 +719,7 @@ export class McpManager {
       const { name: serverName } = args as { name: string };
       if (!serverName) {
         return {
-          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -671,12 +727,12 @@ export class McpManager {
       try {
         await this.stopServer(serverName);
         return {
-          content: [{ type: 'text', text: `Server "${serverName}" stopped.` }],
+          content: [{ type: 'text', text: `Server "${serverName}" stopped.`, annotations: { audience: ['user'], priority: 0.7 } }],
           serverName: 'server-config',
         };
       } catch (err) {
         return {
-          content: [{ type: 'text', text: `Failed to stop server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          content: [{ type: 'text', text: `Failed to stop server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -687,7 +743,7 @@ export class McpManager {
       const { name: serverName } = args as { name: string };
       if (!serverName) {
         return {
-          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -695,12 +751,12 @@ export class McpManager {
       try {
         await this.startServer(serverName);
         return {
-          content: [{ type: 'text', text: `Server "${serverName}" starting...` }],
+          content: [{ type: 'text', text: `Server "${serverName}" starting...`, annotations: { audience: ['user'], priority: 0.7 } }],
           serverName: 'server-config',
         };
       } catch (err) {
         return {
-          content: [{ type: 'text', text: `Failed to start server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          content: [{ type: 'text', text: `Failed to start server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -711,7 +767,7 @@ export class McpManager {
       const { name: serverName } = args as { name: string };
       if (!serverName) {
         return {
-          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -719,12 +775,12 @@ export class McpManager {
       try {
         this.setServerEnabled(serverName, true);
         return {
-          content: [{ type: 'text', text: `Server "${serverName}" has been enabled. Its tools are now available.` }],
+          content: [{ type: 'text', text: `Server "${serverName}" has been enabled. Its tools are now available.`, annotations: { audience: ['user'], priority: 0.7 } }],
           serverName: 'server-config',
         };
       } catch (err) {
         return {
-          content: [{ type: 'text', text: `Failed to enable server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          content: [{ type: 'text', text: `Failed to enable server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -735,7 +791,7 @@ export class McpManager {
       const { name: serverName } = args as { name: string };
       if (!serverName) {
         return {
-          content: [{ type: 'text', text: 'Missing required parameter: name' }],
+          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };
@@ -743,12 +799,12 @@ export class McpManager {
       try {
         this.setServerEnabled(serverName, false);
         return {
-          content: [{ type: 'text', text: `Server "${serverName}" has been disabled. Its tools are no longer available.` }],
+          content: [{ type: 'text', text: `Server "${serverName}" has been disabled. Its tools are no longer available.`, annotations: { audience: ['user'], priority: 0.7 } }],
           serverName: 'server-config',
         };
       } catch (err) {
         return {
-          content: [{ type: 'text', text: `Failed to disable server: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          content: [{ type: 'text', text: `Failed to disable server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
           serverName: 'server-config',
           isError: true,
         };

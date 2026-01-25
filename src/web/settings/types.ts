@@ -76,11 +76,30 @@ export const defaultModelSettings: ModelSettings = {
 // State & Actions
 // ============================================
 
+// ============================================
+// Tool Settings
+// ============================================
+
+export interface ToolSettings {
+  /** Always confirm before executing dangerous tools */
+  confirmDangerousTools: boolean;
+}
+
+export const defaultToolSettings: ToolSettings = {
+  confirmDangerousTools: true, // Safe default - require confirmation
+};
+
+// ============================================
+// State & Actions
+// ============================================
+
 export interface SettingsState {
   models: ModelSettings;
+  tools: ToolSettings;
 }
 
 export type SettingsAction =
   | { type: 'SET_DOER'; config: ModelConfig }
   | { type: 'SET_DREAMER'; config: ModelConfig }
+  | { type: 'SET_CONFIRM_DANGEROUS_TOOLS'; enabled: boolean }
   | { type: 'RESET_DEFAULTS' };

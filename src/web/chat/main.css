@@ -294,6 +294,42 @@
   color: var(--chat-error);
 }
 
+/* Warning level badge */
+.tool-call-warning {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: normal;
+}
+
+.tool-call-warning[data-level='safe'] {
+  background-color: rgba(78, 154, 6, 0.2);
+  color: var(--chat-prompt);
+}
+
+.tool-call-warning[data-level='caution'] {
+  background-color: rgba(204, 204, 0, 0.2);
+  color: var(--chat-warning);
+}
+
+.tool-call-warning[data-level='danger'] {
+  background-color: rgba(204, 60, 60, 0.2);
+  color: var(--chat-error);
+}
+
+/* Warning level border colors */
+.tool-call[data-warning='safe'] {
+  border-left-color: var(--chat-prompt);
+}
+
+.tool-call[data-warning='caution'] {
+  border-left-color: var(--chat-warning);
+}
+
+.tool-call[data-warning='danger'] {
+  border-left-color: var(--chat-error);
+}
+
 .tool-call-content {
   margin-top: var(--space-sm);
   color: var(--chat-string);

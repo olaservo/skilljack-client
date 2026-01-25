@@ -11,11 +11,13 @@ export type {
   ModelConfig,
   ModelSettings,
   ModelOption,
+  ToolSettings,
   SettingsState,
   SettingsAction,
 } from './types.js';
 export {
   defaultModelSettings,
+  defaultToolSettings,
   anthropicModels,
   openaiModels,
   getModelsForProvider,

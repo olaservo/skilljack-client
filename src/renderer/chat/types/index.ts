@@ -38,6 +38,12 @@ export interface ChatToolCall {
   arguments: Record<string, unknown>;
   status: 'pending' | 'executing' | 'completed' | 'failed';
   result?: ToolCallResult;
+  annotations?: {            // Tool behavior annotations
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
 }
 
 export interface ToolCallResult {
@@ -88,6 +94,12 @@ export interface McpTool {
   inputSchema?: Record<string, unknown>;
   hasUi?: boolean;           // Tool has MCP App UI
   uiResourceUri?: string;    // URI of UI resource
+  annotations?: {            // Tool behavior annotations
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
 }
 
 export interface McpContext {
@@ -235,4 +247,6 @@ export interface ChatSettings {
   maxTokens: number;
   systemPrompt?: string;
   autoExecuteTools: boolean;
+  /** If true, always prompt for confirmation before executing dangerous tools */
+  confirmDangerousTools: boolean;
 }

@@ -80,6 +80,34 @@ export interface ServerSummary {
 // Tool Types
 // ============================================
 
+/**
+ * Tool annotations providing hints about tool behavior.
+ * Aligns with MCP SDK ToolAnnotations type.
+ */
+export interface ToolAnnotations {
+  /** If true, tool does not modify environment. Default: false (assumes modifies) */
+  readOnlyHint?: boolean;
+  /** If true, tool may perform destructive actions. Only meaningful if readOnlyHint=false. Default: true */
+  destructiveHint?: boolean;
+  /** If true, repeated calls with same args have same effect. Only meaningful if readOnlyHint=false. Default: false */
+  idempotentHint?: boolean;
+  /** If true, tool may interact with external systems. Default: true */
+  openWorldHint?: boolean;
+}
+
+/**
+ * Content annotations for tool result messages.
+ * Aligns with MCP SDK Annotations type.
+ */
+export interface ContentAnnotations {
+  /** Intended audience for content */
+  audience?: Array<'user' | 'assistant'>;
+  /** Priority level 0.0-1.0. Default: 0.5 */
+  priority?: number;
+  /** ISO 8601 timestamp of last modification */
+  lastModified?: string;
+}
+
 export interface ToolWithUIInfo {
   /** Qualified name for API calls (server__tool) */
   name: string;
@@ -91,6 +119,8 @@ export interface ToolWithUIInfo {
   hasUi: boolean;
   uiResourceUri?: string;
   serverName: string;
+  /** Tool behavior annotations */
+  annotations?: ToolAnnotations;
 }
 
 export interface ToolWithEnabledState extends ToolWithUIInfo {
@@ -107,6 +137,8 @@ export interface McpTool {
   inputSchema?: Record<string, unknown>;
   hasUi?: boolean;
   uiResourceUri?: string;
+  /** Tool behavior annotations */
+  annotations?: ToolAnnotations;
 }
 
 export interface ToolCallResult {
