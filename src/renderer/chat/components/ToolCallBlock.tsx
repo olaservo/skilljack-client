@@ -2,6 +2,7 @@
  * Tool Call Block Component
  *
  * Displays a tool call with collapsible arguments and result.
+ * Shows warning level coloring based on tool annotations.
  */
 
 import { useState } from 'react';
@@ -10,6 +11,29 @@ import type { ChatToolCall } from '../types';
 
 interface ToolCallBlockProps {
   toolCall: ChatToolCall;
+}
+
+type WarningLevel = 'safe' | 'caution' | 'danger';
+
+/**
+ * Get warning level for a tool based on its annotations.
+ */
+function getWarningLevel(annotations: ChatToolCall['annotations']): WarningLevel {
+  // No annotations = assume dangerous
+  if (!annotations) return 'danger';
+
+  // Read-only tools are safe
+  if (annotations.readOnlyHint) return 'safe';
+
+  // Check destructive and idempotent hints (with defaults per MCP spec)
+  const isDestructive = annotations.destructiveHint !== false; // default true
+  const isIdempotent = annotations.idempotentHint === true; // default false
+
+  // Destructive, non-idempotent tools are dangerous
+  if (isDestructive && !isIdempotent) return 'danger';
+
+  // Non-destructive or idempotent tools are caution
+  return 'caution';
 }
 
 const ChevronIcon = ({ open }: { open: boolean }) => (
@@ -35,6 +59,12 @@ const statusLabels: Record<ChatToolCall['status'], string> = {
   failed: 'Failed',
 };
 
+const warningLabels: Record<WarningLevel, string> = {
+  safe: 'Safe',
+  caution: 'Caution',
+  danger: 'Danger',
+};
+
 export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -42,9 +72,12 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
     Object.keys(toolCall.arguments).length > 0 ||
     toolCall.result !== undefined;
 
+  const warningLevel = getWarningLevel(toolCall.annotations);
+
   return (
     <Collapsible.Root
       className="tool-call"
+      data-warning={warningLevel}
       open={isOpen}
       onOpenChange={setIsOpen}
     >
@@ -53,6 +86,9 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
           <ChevronIcon open={isOpen} />
           <span className="tool-call-name">{toolCall.displayName}</span>
           <span className="tool-call-server">{toolCall.serverName}</span>
+          <span className="tool-call-warning" data-level={warningLevel}>
+            {warningLabels[warningLevel]}
+          </span>
           <span className="tool-call-status" data-status={toolCall.status}>
             {statusLabels[toolCall.status]}
           </span>

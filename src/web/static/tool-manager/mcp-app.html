@@ -254,6 +254,28 @@
       border-radius: 4px;
     }
 
+    /* Warning level badges */
+    .tool-warning-badge {
+      font-size: 10px;
+      padding: 2px 5px;
+      color: white;
+      border-radius: 4px;
+      cursor: help;
+    }
+
+    .tool-warning-safe {
+      background: var(--success);
+    }
+
+    .tool-warning-caution {
+      background: var(--warning);
+      color: #1a1a1a;
+    }
+
+    .tool-warning-danger {
+      background: #ef4444;
+    }
+
     .tool-description {
       font-size: 11px;
       color: var(--text-secondary);
@@ -445,6 +467,78 @@
     // Toggle section collapse
     function toggleSection(sectionId) {
       const section = document.getElementById(sectionId);
+
+    // ============================================
+    // Tool Warning Level (from annotations)
+    // ============================================
+
+    /**
+     * Get warning level for a tool based on its annotations.
+     * - 'safe': Read-only tools
+     * - 'caution': Non-destructive or idempotent tools
+     * - 'danger': Destructive, non-idempotent tools (or no annotations)
+     */
+    function getWarningLevel(tool) {
+      const annotations = tool.annotations;
+
+      // No annotations = assume dangerous
+      if (!annotations) return 'danger';
+
+      // Read-only tools are safe
+      if (annotations.readOnlyHint) return 'safe';
+
+      // Check destructive and idempotent hints (with defaults per MCP spec)
+      const isDestructive = annotations.destructiveHint !== false; // default true
+      const isIdempotent = annotations.idempotentHint === true; // default false
+
+      // Destructive, non-idempotent tools are dangerous
+      if (isDestructive && !isIdempotent) return 'danger';
+
+      // Non-destructive or idempotent tools are caution
+      return 'caution';
+    }
+
+    /**
+     * Get human-readable reason for warning level.
+     */
+    function getWarningReason(tool) {
+      const annotations = tool.annotations;
+
+      if (!annotations) {
+        return 'No annotations - assuming dangerous';
+      }
+
+      if (annotations.readOnlyHint) {
+        return 'Read-only - does not modify environment';
+      }
+
+      const isDestructive = annotations.destructiveHint !== false;
+      const isIdempotent = annotations.idempotentHint === true;
+
+      if (isDestructive && !isIdempotent) {
+        return 'Destructive and non-idempotent';
+      }
+
+      if (!isDestructive) {
+        return 'Non-destructive';
+      }
+
+      if (isIdempotent) {
+        return 'Idempotent - safe to retry';
+      }
+
+      return 'May modify environment';
+    }
+
+    /**
+     * Get warning badge HTML for a tool.
+     */
+    function getWarningBadge(tool) {
+      const level = getWarningLevel(tool);
+      const reason = getWarningReason(tool);
+      const labels = { safe: 'Safe', caution: 'Caution', danger: 'Danger' };
+      return `<span class="tool-warning-badge tool-warning-${level}" title="${escapeHtml(reason)}">${labels[level]}</span>`;
+    }
       section.classList.toggle('collapsed');
     }
 
@@ -619,6 +713,7 @@
               <span class="tool-name">${escapeHtml(tool.displayName)}</span>
               <span class="tool-server">${escapeHtml(tool.serverName)}</span>
               ${tool.hasUi ? '<span class="tool-ui-badge">UI</span>' : ''}
+              ${getWarningBadge(tool)}
             </div>
             <div class="tool-description">${escapeHtml(tool.description || 'No description')}</div>
           </div>

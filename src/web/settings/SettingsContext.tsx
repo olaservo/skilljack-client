@@ -1,7 +1,7 @@
 /**
  * Settings Context
  *
- * Manages model settings state and persistence.
+ * Manages model and tool settings state and persistence.
  * Provides Doer vs Dreamer model configuration.
  */
 
@@ -17,20 +17,22 @@ import {
 import type {
   ModelSettings,
   ModelConfig,
+  ToolSettings,
   SettingsState,
   SettingsAction,
 } from './types.js';
-import { defaultModelSettings } from './types.js';
+import { defaultModelSettings, defaultToolSettings } from './types.js';
 
 // ============================================
 // Local Storage
 // ============================================
 
-const STORAGE_KEY = 'skilljack-model-settings';
+const MODEL_STORAGE_KEY = 'skilljack-model-settings';
+const TOOL_STORAGE_KEY = 'skilljack-tool-settings';
 
-function loadSettings(): ModelSettings {
+function loadModelSettings(): ModelSettings {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(MODEL_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       // Validate structure
@@ -57,12 +59,28 @@ function loadSettings(): ModelSettings {
   return defaultModelSettings;
 }
 
+function loadToolSettings(): ToolSettings {
+  try {
+    const saved = localStorage.getItem(TOOL_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        confirmDangerousTools: parsed.confirmDangerousTools ?? defaultToolSettings.confirmDangerousTools,
+      };
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return defaultToolSettings;
+}
+
 // ============================================
 // Reducer
 // ============================================
 
 const initialState: SettingsState = {
-  models: loadSettings(),
+  models: loadModelSettings(),
+  tools: loadToolSettings(),
 };
 
 function settingsReducer(state: SettingsState, action: SettingsAction): SettingsState {
@@ -79,10 +97,17 @@ function settingsReducer(state: SettingsState, action: SettingsAction): Settings
         models: { ...state.models, dreamer: action.config },
       };
 
+    case 'SET_CONFIRM_DANGEROUS_TOOLS':
+      return {
+        ...state,
+        tools: { ...state.tools, confirmDangerousTools: action.enabled },
+      };
+
     case 'RESET_DEFAULTS':
       return {
         ...state,
         models: defaultModelSettings,
+        tools: defaultToolSettings,
       };
 
     default:
@@ -100,10 +125,12 @@ interface SettingsContextValue {
   // Convenience actions
   setDoer: (config: ModelConfig) => void;
   setDreamer: (config: ModelConfig) => void;
+  setConfirmDangerousTools: (enabled: boolean) => void;
   resetDefaults: () => void;
   // Computed
   doer: ModelConfig;
   dreamer: ModelConfig;
+  confirmDangerousTools: boolean;
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -128,23 +155,34 @@ export function SettingsProvider({ children }: SettingsProviderProps) {
     dispatch({ type: 'SET_DREAMER', config });
   }, []);
 
+  const setConfirmDangerousTools = useCallback((enabled: boolean) => {
+    dispatch({ type: 'SET_CONFIRM_DANGEROUS_TOOLS', enabled });
+  }, []);
+
   const resetDefaults = useCallback(() => {
     dispatch({ type: 'RESET_DEFAULTS' });
   }, []);
 
-  // Persist settings on change
+  // Persist model settings on change
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.models));
+    localStorage.setItem(MODEL_STORAGE_KEY, JSON.stringify(state.models));
   }, [state.models]);
+
+  // Persist tool settings on change
+  useEffect(() => {
+    localStorage.setItem(TOOL_STORAGE_KEY, JSON.stringify(state.tools));
+  }, [state.tools]);
 
   const value: SettingsContextValue = {
     state,
     dispatch,
     setDoer,
     setDreamer,
+    setConfirmDangerousTools,
     resetDefaults,
     doer: state.models.doer,
     dreamer: state.models.dreamer,
+    confirmDangerousTools: state.tools.confirmDangerousTools,
   };
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

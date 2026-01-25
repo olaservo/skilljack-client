@@ -28,6 +28,7 @@ import {
   setServerEnabled,
   getServersWithState,
 } from './tool-manager-state.js';
+import type { ToolAnnotations } from '../shared/types.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -65,6 +66,8 @@ interface ToolWithUIInfo {
   hasUi: boolean;
   uiResourceUri?: string;
   serverName: string;
+  /** Tool behavior annotations */
+  annotations?: ToolAnnotations;
 }
 
 /** Built-in tool-manager pseudo-tool */
@@ -75,6 +78,10 @@ const TOOL_MANAGER_TOOL: ToolWithUIInfo = {
   hasUi: true,
   uiResourceUri: 'builtin://tool-manager',
   serverName: 'tool-manager',
+  annotations: {
+    readOnlyHint: true,
+    openWorldHint: false,
+  },
 };
 
 /** Convert aggregated tools to UI info format */
