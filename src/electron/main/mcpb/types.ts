@@ -48,9 +48,10 @@ export interface McpbMcpConfig {
 
 /**
  * Server definition in manifest
+ * Note: 'uv' type added in manifest v0.4 for Python UV runtime
  */
 export interface McpbServer {
-  type: 'node' | 'python' | 'binary';
+  type: 'node' | 'python' | 'binary' | 'uv';
   entry_point: string;
   mcp_config: McpbMcpConfig;
 }

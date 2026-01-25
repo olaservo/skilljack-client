@@ -21,7 +21,8 @@
     "electron:dev": "electron-forge start",
     "electron:build": "electron-forge make",
     "electron:package": "electron-forge package",
-    "electron:publish": "electron-forge publish"
+    "electron:publish": "electron-forge publish",
+    "pack-mcpb": "node scripts/pack-mcpb.js"
   },
   "config": {
     "forge": "./forge.config.ts"

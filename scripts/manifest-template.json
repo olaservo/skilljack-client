@@ -1,0 +1,52 @@
+{
+  "manifest_version": "0.3",
+  "name": "my-mcp-server",
+  "display_name": "My MCP Server",
+  "version": "1.0.0",
+  "description": "A brief description of what your MCP server does",
+  "author": {
+    "name": "Your Name",
+    "email": "you@example.com",
+    "url": "https://github.com/you"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/you/my-mcp-server"
+  },
+  "license": "MIT",
+  "keywords": ["mcp", "example"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${EXTENSION_DIR}/dist/index.js"],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "example_tool",
+      "description": "An example tool that does something useful"
+    }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"]
+  },
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "API Key",
+      "description": "Your API key for the service",
+      "required": true,
+      "sensitive": true
+    },
+    "output_dir": {
+      "type": "directory",
+      "title": "Output Directory",
+      "description": "Where to save output files",
+      "required": false,
+      "default": "${HOME}/my-server-output"
+    }
+  }
+}
