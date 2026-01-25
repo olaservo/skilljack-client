@@ -449,6 +449,69 @@ export function McpAppPanel({ panel, onClose, isActive = true }: McpAppPanelProp
             );
           }
         }
+
+        // ============================================
+        // MCPB Installation specific JSON-RPC methods
+        // ============================================
+
+        // Get MCPB preview data
+        if (data.method === 'mcpb/getPreviewData' && data.id) {
+          try {
+            if (window.electronAPI && 'getMcpbPreviewData' in window.electronAPI) {
+              const preview = await (window.electronAPI as { getMcpbPreviewData: () => Promise<unknown> }).getMcpbPreviewData();
+              sendToApp(createJsonRpcResponse(data.id, preview));
+            } else {
+              sendToApp(createJsonRpcError(data.id, -32603, 'MCPB preview not available'));
+            }
+          } catch (error) {
+            console.error('[McpAppPanel] mcpb/getPreviewData error:', error);
+            sendToApp(
+              createJsonRpcError(data.id, -32603, error instanceof Error ? error.message : 'Failed to get preview data')
+            );
+          }
+        }
+
+        // Confirm MCPB installation
+        if (data.method === 'mcpb/confirmInstall' && data.id) {
+          try {
+            const { mcpbPath, userConfig } = data.params || {};
+            if (window.electronAPI && 'confirmMcpbInstall' in window.electronAPI) {
+              const result = await (window.electronAPI as { confirmMcpbInstall: (mcpbPath: string, userConfig?: Record<string, unknown>) => Promise<unknown> }).confirmMcpbInstall(mcpbPath, userConfig);
+              sendToApp(createJsonRpcResponse(data.id, result));
+            } else {
+              sendToApp(createJsonRpcError(data.id, -32603, 'MCPB install not available'));
+            }
+          } catch (error) {
+            console.error('[McpAppPanel] mcpb/confirmInstall error:', error);
+            sendToApp(
+              createJsonRpcError(data.id, -32603, error instanceof Error ? error.message : 'Failed to install MCPB')
+            );
+          }
+        }
+
+        // Close MCPB confirmation dialog
+        if (data.method === 'mcpb/close' && data.id) {
+          onClose();
+          sendToApp(createJsonRpcResponse(data.id, { success: true }));
+        }
+
+        // Browse for file or directory
+        if (data.method === 'mcpb/browsePath' && data.id) {
+          try {
+            const { type } = data.params || {};
+            if (window.electronAPI && 'browsePath' in window.electronAPI) {
+              const result = await (window.electronAPI as { browsePath: (type: string) => Promise<{ path?: string }> }).browsePath(type);
+              sendToApp(createJsonRpcResponse(data.id, result));
+            } else {
+              sendToApp(createJsonRpcError(data.id, -32603, 'Browse not available'));
+            }
+          } catch (error) {
+            console.error('[McpAppPanel] mcpb/browsePath error:', error);
+            sendToApp(
+              createJsonRpcError(data.id, -32603, 'Failed to browse path')
+            );
+          }
+        }
       }
     };
 

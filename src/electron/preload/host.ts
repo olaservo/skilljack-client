@@ -288,6 +288,25 @@ const electronAPI = {
   },
 
   // ============================================
+  // MCPB Installation
+  // ============================================
+
+  getMcpbPreviewData: () => {
+    validateInvokeChannel(channels.GET_MCPB_PREVIEW_DATA);
+    return ipcRenderer.invoke(channels.GET_MCPB_PREVIEW_DATA);
+  },
+
+  confirmMcpbInstall: (mcpbPath: string, userConfig?: Record<string, unknown>) => {
+    validateInvokeChannel(channels.CONFIRM_MCPB_INSTALL);
+    return ipcRenderer.invoke(channels.CONFIRM_MCPB_INSTALL, mcpbPath, userConfig);
+  },
+
+  browsePath: (type: 'file' | 'directory') => {
+    validateInvokeChannel(channels.BROWSE_PATH);
+    return ipcRenderer.invoke(channels.BROWSE_PATH, type);
+  },
+
+  // ============================================
   // Lifecycle Event Listeners
   // ============================================
 
