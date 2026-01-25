@@ -35,6 +35,13 @@ import {
 } from '../../multi-server.js';
 import { getToolUiResourceUri, fetchUIResource, isToolVisibleToModel } from '../../capabilities/apps.js';
 import { convertLegacyConfig } from './config-adapter.js';
+import {
+  previewMcpb,
+  installMcpb,
+  getManifestDisplayInfo,
+  resolveDefaultValue,
+  type McpbPreviewResult,
+} from './mcpb/index.js';
 import * as channels from '../../shared/channels.js';
 import type {
   ServerSummary,
@@ -316,6 +323,25 @@ const SERVER_DISABLE_TOOL: ToolWithUIInfo = {
   serverName: 'server-config',
 };
 
+const SERVER_INSTALL_MCPB_TOOL: ToolWithUIInfo = {
+  name: 'server-config__install-mcpb',
+  displayName: 'install-mcpb',
+  description: 'Install an MCP server from an MCPB (MCP Bundle) file. Shows extension details and asks for confirmation before installing.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      mcpbPath: {
+        type: 'string',
+        description: 'Absolute path to the .mcpb file to install',
+      },
+    },
+    required: ['mcpbPath'],
+  },
+  hasUi: true,
+  uiResourceUri: 'builtin://mcpb-confirm',
+  serverName: 'server-config',
+};
+
 // All server-config action tools
 const SERVER_CONFIG_ACTION_TOOLS: ToolWithUIInfo[] = [
   SERVER_LIST_TOOL,
@@ -326,6 +352,7 @@ const SERVER_CONFIG_ACTION_TOOLS: ToolWithUIInfo[] = [
   SERVER_START_TOOL,
   SERVER_ENABLE_TOOL,
   SERVER_DISABLE_TOOL,
+  SERVER_INSTALL_MCPB_TOOL,
 ];
 
 // ============================================
@@ -336,6 +363,7 @@ export class McpManager {
   private lifecycleManager: LifecycleManager | null = null;
   private toolState = new ToolManagerState();
   private mainWindow: BrowserWindow | null = null;
+  private pendingMcpbPreview: McpbPreviewResult | null = null;
 
   async initialize(): Promise<void> {
     // Try to load config from default locations
@@ -755,6 +783,41 @@ export class McpManager {
       }
     }
 
+    // Handle MCPB installation tool - this triggers the confirmation UI
+    if (name === 'server-config__install-mcpb') {
+      const { mcpbPath } = args as { mcpbPath: string };
+      if (!mcpbPath) {
+        return {
+          content: [{ type: 'text', text: 'Missing required parameter: mcpbPath' }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+      try {
+        // Preview the MCPB to get manifest and signature info
+        const preview = await previewMcpb(mcpbPath);
+        const displayInfo = getManifestDisplayInfo(preview.manifest);
+
+        // Store the preview data for the UI to access
+        this.pendingMcpbPreview = preview;
+
+        // Return a message - the UI will be shown automatically due to hasUi: true
+        return {
+          content: [{
+            type: 'text',
+            text: `Opening installation dialog for "${displayInfo.displayName}" v${displayInfo.version}...`,
+          }],
+          serverName: 'server-config',
+        };
+      } catch (err) {
+        return {
+          content: [{ type: 'text', text: `Failed to preview MCPB: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+          serverName: 'server-config',
+          isError: true,
+        };
+      }
+    }
+
     const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
     const { serverName, result } = await callTool(clients, name, args, {
       timeout: 120000,
@@ -895,6 +958,41 @@ export class McpManager {
         return null;
       } catch (err) {
         log.error('[McpManager] Failed to load server-config UI:', err);
+        return null;
+      }
+    }
+
+    // Handle built-in mcpb-confirm UI
+    if (serverName === 'server-config' && uri === 'builtin://mcpb-confirm') {
+      try {
+        const appPath = app.getAppPath();
+        const possiblePaths = [
+          // Development: relative to app root
+          join(appPath, 'src/web/static/mcpb-confirm/mcp-app.html'),
+          // Production: in resources folder
+          join(appPath, 'resources/mcpb-confirm/mcp-app.html'),
+          // Fallback: relative to __dirname
+          join(__dirname, '../../web/static/mcpb-confirm/mcp-app.html'),
+          join(__dirname, '../../../src/web/static/mcpb-confirm/mcp-app.html'),
+        ];
+
+        for (const htmlPath of possiblePaths) {
+          if (existsSync(htmlPath)) {
+            const html = await readFile(htmlPath, 'utf-8');
+            log.info('[McpManager] Loaded mcpb-confirm UI from:', htmlPath);
+            return {
+              uri,
+              mimeType: 'text/html;mcp-app',
+              text: html,
+              serverName: 'server-config',
+            };
+          }
+        }
+
+        log.warn('[McpManager] mcpb-confirm UI not found. Tried paths:', possiblePaths);
+        return null;
+      } catch (err) {
+        log.error('[McpManager] Failed to load mcpb-confirm UI:', err);
         return null;
       }
     }
@@ -1101,6 +1199,105 @@ export class McpManager {
 
     // Reload configuration
     await this.loadConfig(configPath);
+  }
+
+  // ============================================
+  // MCPB Installation
+  // ============================================
+
+  /**
+   * Get pending MCPB preview data for the confirmation UI
+   */
+  getMcpbPreviewData(): {
+    mcpbPath: string;
+    manifest: ReturnType<typeof getManifestDisplayInfo>;
+    signature: McpbPreviewResult['signature'];
+    platformCompatible: boolean;
+    missingRequiredConfig: string[];
+  } | null {
+    if (!this.pendingMcpbPreview) {
+      return null;
+    }
+
+    const displayInfo = getManifestDisplayInfo(this.pendingMcpbPreview.manifest);
+
+    // Resolve default values for user config fields
+    const userConfigFields = displayInfo.userConfigFields.map(field => ({
+      ...field,
+      default: resolveDefaultValue(field.default as string | number | boolean | string[] | undefined),
+    }));
+
+    return {
+      mcpbPath: this.pendingMcpbPreview.mcpbPath,
+      manifest: {
+        ...displayInfo,
+        userConfigFields,
+      },
+      signature: this.pendingMcpbPreview.signature,
+      platformCompatible: this.pendingMcpbPreview.platformCompatible,
+      missingRequiredConfig: this.pendingMcpbPreview.missingRequiredConfig,
+    };
+  }
+
+  /**
+   * Confirm and complete MCPB installation
+   */
+  async confirmMcpbInstall(
+    mcpbPath: string,
+    userConfig?: Record<string, unknown>
+  ): Promise<{ success: boolean; message: string; serverName?: string }> {
+    try {
+      // Install the MCPB
+      const result = await installMcpb({
+        mcpbPath,
+        userConfig,
+      });
+
+      if (!result.success) {
+        return {
+          success: false,
+          message: result.message,
+        };
+      }
+
+      // Add server to configuration if installation succeeded
+      if (result.config) {
+        const configPath = store.get('configPath');
+        if (!configPath) {
+          // Create new config file if it doesn't exist
+          const newConfigPath = join(app.getPath('userData'), 'servers.json');
+          await writeFile(
+            newConfigPath,
+            JSON.stringify({ mcpServers: {} }, null, 2),
+            'utf-8'
+          );
+          store.set('configPath', newConfigPath);
+        }
+
+        // Add the server using the resolved config
+        await this.addServerConfig({
+          name: result.serverName,
+          command: result.config.command,
+          args: result.config.args,
+          env: result.config.env,
+        });
+      }
+
+      // Clear pending preview
+      this.pendingMcpbPreview = null;
+
+      return {
+        success: true,
+        message: result.message,
+        serverName: result.serverName,
+      };
+    } catch (error) {
+      log.error('[MCPB] Installation failed:', error);
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Installation failed',
+      };
+    }
   }
 
   // ============================================

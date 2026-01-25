@@ -144,6 +144,19 @@ export const UPDATE_SERVER_CONFIG = 'config:update-server';
 export const REMOVE_SERVER_CONFIG = 'config:remove-server';
 
 // ============================================
+// MCPB Installation Channels
+// ============================================
+
+/** Get MCPB preview data for confirmation UI */
+export const GET_MCPB_PREVIEW_DATA = 'mcpb:get-preview-data';
+
+/** Confirm and complete MCPB installation */
+export const CONFIRM_MCPB_INSTALL = 'mcpb:confirm-install';
+
+/** Browse for file or directory (used by MCPB user config) */
+export const BROWSE_PATH = 'mcpb:browse-path';
+
+// ============================================
 // Settings Channels
 // ============================================
 
@@ -201,6 +214,10 @@ export const INVOKE_CHANNELS = [
   ADD_SERVER_CONFIG,
   UPDATE_SERVER_CONFIG,
   REMOVE_SERVER_CONFIG,
+  // MCPB installation
+  GET_MCPB_PREVIEW_DATA,
+  CONFIRM_MCPB_INSTALL,
+  BROWSE_PATH,
 ] as const;
 
 /** Channels that renderer can listen to (main → renderer events) */

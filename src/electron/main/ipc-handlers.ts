@@ -5,7 +5,7 @@
  * All handlers use the channel constants from shared/channels.ts.
  */
 
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, dialog } from 'electron';
 import log from 'electron-log';
 import Store from 'electron-store';
 import type { ModelMessage } from 'ai';
@@ -352,6 +352,49 @@ export function setupIPCHandlers(
       return { success: true };
     } catch (error) {
       log.error('REMOVE_SERVER_CONFIG error:', error);
+      throw error;
+    }
+  });
+
+  // ============================================
+  // MCPB Installation
+  // ============================================
+
+  ipcMain.handle(channels.GET_MCPB_PREVIEW_DATA, () => {
+    try {
+      return serverManager.getMcpbPreviewData();
+    } catch (error) {
+      log.error('GET_MCPB_PREVIEW_DATA error:', error);
+      throw error;
+    }
+  });
+
+  ipcMain.handle(
+    channels.CONFIRM_MCPB_INSTALL,
+    async (_event, mcpbPath: string, userConfig?: Record<string, unknown>) => {
+      try {
+        return await serverManager.confirmMcpbInstall(mcpbPath, userConfig);
+      } catch (error) {
+        log.error('CONFIRM_MCPB_INSTALL error:', error);
+        throw error;
+      }
+    }
+  );
+
+  ipcMain.handle(channels.BROWSE_PATH, async (_event, type: 'file' | 'directory') => {
+    try {
+      const result = await dialog.showOpenDialog(mainWindow, {
+        properties: type === 'directory' ? ['openDirectory'] : ['openFile'],
+        title: type === 'directory' ? 'Select Directory' : 'Select File',
+      });
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { path: undefined };
+      }
+
+      return { path: result.filePaths[0] };
+    } catch (error) {
+      log.error('BROWSE_PATH error:', error);
       throw error;
     }
   });
