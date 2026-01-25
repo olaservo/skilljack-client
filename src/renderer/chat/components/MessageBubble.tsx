@@ -33,7 +33,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       {message.toolCalls && message.toolCalls.length > 0 && (
         <div className="chat-message-tools">
           {message.toolCalls.map((toolCall) => (
-            <ToolCallBlock key={toolCall.id} toolCall={toolCall} />
+            <ToolCallBlock key={toolCall.id} toolCall={toolCall} messageId={message.id} />
           ))}
         </div>
       )}

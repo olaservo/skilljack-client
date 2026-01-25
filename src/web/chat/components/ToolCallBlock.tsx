@@ -2,38 +2,67 @@
  * Tool Call Block Component
  *
  * Displays a tool call with collapsible arguments and result.
- * Shows warning level coloring based on tool annotations.
+ * Shows annotation badges based on declared MCP tool annotations.
+ * Provides a Run button for pending tools that require confirmation.
  */
 
 import { useState } from 'react';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import type { ChatToolCall } from '../types';
+import { useToolExecution } from '../hooks';
 
 interface ToolCallBlockProps {
   toolCall: ChatToolCall;
+  messageId: string;
 }
 
-type WarningLevel = 'safe' | 'caution' | 'danger';
+interface AnnotationBadge {
+  label: string;
+  className: string;
+  title: string;
+}
 
 /**
- * Get warning level for a tool based on its annotations.
+ * Get annotation badges for a tool based on its declared annotations.
  */
-function getWarningLevel(annotations: ChatToolCall['annotations']): WarningLevel {
-  // No annotations = assume dangerous
-  if (!annotations) return 'danger';
+function getAnnotationBadges(annotations: ChatToolCall['annotations']): AnnotationBadge[] {
+  if (!annotations) return [];
 
-  // Read-only tools are safe
-  if (annotations.readOnlyHint) return 'safe';
+  const badges: AnnotationBadge[] = [];
 
-  // Check destructive and idempotent hints (with defaults per MCP spec)
-  const isDestructive = annotations.destructiveHint !== false; // default true
-  const isIdempotent = annotations.idempotentHint === true; // default false
+  if (annotations.readOnlyHint === true) {
+    badges.push({
+      label: 'Read-only',
+      className: 'annotation-readonly',
+      title: 'Does not modify data or state',
+    });
+  }
 
-  // Destructive, non-idempotent tools are dangerous
-  if (isDestructive && !isIdempotent) return 'danger';
+  if (annotations.destructiveHint === true) {
+    badges.push({
+      label: 'Destructive',
+      className: 'annotation-destructive',
+      title: 'May delete or overwrite data',
+    });
+  }
 
-  // Non-destructive or idempotent tools are caution
-  return 'caution';
+  if (annotations.idempotentHint === true) {
+    badges.push({
+      label: 'Idempotent',
+      className: 'annotation-idempotent',
+      title: 'Running multiple times has the same effect',
+    });
+  }
+
+  if (annotations.openWorldHint === true) {
+    badges.push({
+      label: 'External',
+      className: 'annotation-external',
+      title: 'Interacts with external systems',
+    });
+  }
+
+  return badges;
 }
 
 const ChevronIcon = ({ open }: { open: boolean }) => (
@@ -59,25 +88,25 @@ const statusLabels: Record<ChatToolCall['status'], string> = {
   failed: 'Failed',
 };
 
-const warningLabels: Record<WarningLevel, string> = {
-  safe: 'Safe',
-  caution: 'Caution',
-  danger: 'Danger',
-};
-
-export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
+export function ToolCallBlock({ toolCall, messageId }: ToolCallBlockProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const { executeTool } = useToolExecution();
 
   const hasContent =
     Object.keys(toolCall.arguments).length > 0 ||
     toolCall.result !== undefined;
 
-  const warningLevel = getWarningLevel(toolCall.annotations);
+  const annotationBadges = getAnnotationBadges(toolCall.annotations);
+  const isPending = toolCall.status === 'pending';
+
+  const handleRun = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Don't toggle collapsible
+    executeTool(messageId, toolCall);
+  };
 
   return (
     <Collapsible.Root
       className="tool-call"
-      data-warning={warningLevel}
       open={isOpen}
       onOpenChange={setIsOpen}
     >
@@ -86,12 +115,27 @@ export function ToolCallBlock({ toolCall }: ToolCallBlockProps) {
           <ChevronIcon open={isOpen} />
           <span className="tool-call-name">{toolCall.displayName}</span>
           <span className="tool-call-server">{toolCall.serverName}</span>
-          <span className="tool-call-warning" data-level={warningLevel}>
-            {warningLabels[warningLevel]}
-          </span>
+          {annotationBadges.map((badge) => (
+            <span
+              key={badge.className}
+              className={`tool-annotation-badge ${badge.className}`}
+              title={badge.title}
+            >
+              {badge.label}
+            </span>
+          ))}
           <span className="tool-call-status" data-status={toolCall.status}>
             {statusLabels[toolCall.status]}
           </span>
+          {isPending && (
+            <button
+              className="tool-call-run-btn"
+              onClick={handleRun}
+              title="Run this tool"
+            >
+              Run
+            </button>
+          )}
         </button>
       </Collapsible.Trigger>
 

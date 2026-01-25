@@ -351,40 +351,50 @@
   color: var(--chat-error);
 }
 
-/* Warning level badge */
-.tool-call-warning {
+/* Annotation badges */
+.tool-annotation-badge {
   font-size: var(--font-size-xs);
   padding: 2px 6px;
   border-radius: 3px;
   font-weight: normal;
+  margin-left: 4px;
 }
 
-.tool-call-warning[data-level='safe'] {
+.annotation-readonly {
   background-color: rgba(78, 154, 6, 0.2);
   color: var(--chat-prompt);
 }
 
-.tool-call-warning[data-level='caution'] {
-  background-color: rgba(204, 204, 0, 0.2);
-  color: var(--chat-warning);
+.annotation-idempotent {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
 }
 
-.tool-call-warning[data-level='danger'] {
-  background-color: rgba(204, 60, 60, 0.2);
-  color: var(--chat-error);
+.annotation-destructive {
+  background-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
 }
 
-/* Warning level border colors */
-.tool-call[data-warning='safe'] {
-  border-left-color: var(--chat-prompt);
+.annotation-external {
+  background-color: rgba(139, 92, 246, 0.2);
+  color: #a78bfa;
 }
 
-.tool-call[data-warning='caution'] {
-  border-left-color: var(--chat-warning);
+/* Run button for pending tools */
+.tool-call-run-btn {
+  margin-left: auto;
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+  background-color: var(--chat-prompt);
+  color: var(--chat-bg);
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: 500;
 }
 
-.tool-call[data-warning='danger'] {
-  border-left-color: var(--chat-error);
+.tool-call-run-btn:hover {
+  background-color: #5cb85c;
 }
 
 .tool-call-content {

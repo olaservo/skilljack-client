@@ -254,26 +254,33 @@
       border-radius: 4px;
     }
 
-    /* Warning level badges */
-    .tool-warning-badge {
+    /* Annotation badges */
+    .tool-annotation-badge {
       font-size: 10px;
       padding: 2px 5px;
-      color: white;
       border-radius: 4px;
       cursor: help;
+      margin-left: 4px;
     }
 
-    .tool-warning-safe {
+    .annotation-readonly {
       background: var(--success);
+      color: white;
     }
 
-    .tool-warning-caution {
-      background: var(--warning);
+    .annotation-idempotent {
+      background: #3b82f6;
+      color: white;
+    }
+
+    .annotation-destructive {
+      background: #f59e0b;
       color: #1a1a1a;
     }
 
-    .tool-warning-danger {
-      background: #ef4444;
+    .annotation-external {
+      background: #8b5cf6;
+      color: white;
     }
 
     .tool-description {
@@ -467,79 +474,40 @@
     // Toggle section collapse
     function toggleSection(sectionId) {
       const section = document.getElementById(sectionId);
+      section.classList.toggle('collapsed');
+    }
 
     // ============================================
     // Tool Warning Level (from annotations)
     // ============================================
 
     /**
-     * Get warning level for a tool based on its annotations.
-     * - 'safe': Read-only tools
-     * - 'caution': Non-destructive or idempotent tools
-     * - 'danger': Destructive, non-idempotent tools (or no annotations)
-     */
-    function getWarningLevel(tool) {
-      const annotations = tool.annotations;
-
-      // No annotations = assume dangerous
-      if (!annotations) return 'danger';
-
-      // Read-only tools are safe
-      if (annotations.readOnlyHint) return 'safe';
-
-      // Check destructive and idempotent hints (with defaults per MCP spec)
-      const isDestructive = annotations.destructiveHint !== false; // default true
-      const isIdempotent = annotations.idempotentHint === true; // default false
-
-      // Destructive, non-idempotent tools are dangerous
-      if (isDestructive && !isIdempotent) return 'danger';
-
-      // Non-destructive or idempotent tools are caution
-      return 'caution';
-    }
-
-    /**
-     * Get human-readable reason for warning level.
-     */
-    function getWarningReason(tool) {
-      const annotations = tool.annotations;
-
-      if (!annotations) {
-        return 'No annotations - assuming dangerous';
-      }
-
-      if (annotations.readOnlyHint) {
-        return 'Read-only - does not modify environment';
-      }
-
-      const isDestructive = annotations.destructiveHint !== false;
-      const isIdempotent = annotations.idempotentHint === true;
-
-      if (isDestructive && !isIdempotent) {
-        return 'Destructive and non-idempotent';
-      }
-
-      if (!isDestructive) {
-        return 'Non-destructive';
-      }
-
-      if (isIdempotent) {
-        return 'Idempotent - safe to retry';
-      }
-
-      return 'May modify environment';
-    }
-
-    /**
-     * Get warning badge HTML for a tool.
+     * Get annotation badges HTML for a tool.
+     * Shows badges for each declared MCP annotation.
      */
     function getWarningBadge(tool) {
-      const level = getWarningLevel(tool);
-      const reason = getWarningReason(tool);
-      const labels = { safe: 'Safe', caution: 'Caution', danger: 'Danger' };
-      return `<span class="tool-warning-badge tool-warning-${level}" title="${escapeHtml(reason)}">${labels[level]}</span>`;
-    }
-      section.classList.toggle('collapsed');
+      const annotations = tool.annotations;
+      if (!annotations) return '';
+
+      const badges = [];
+
+      if (annotations.readOnlyHint === true) {
+        badges.push('<span class="tool-annotation-badge annotation-readonly" title="Does not modify data or state">Read-only</span>');
+      }
+
+      if (annotations.destructiveHint === true) {
+        badges.push('<span class="tool-annotation-badge annotation-destructive" title="May delete or overwrite data">Destructive</span>');
+      }
+
+      if (annotations.idempotentHint === true) {
+        badges.push('<span class="tool-annotation-badge annotation-idempotent" title="Running multiple times has the same effect">Idempotent</span>');
+      }
+
+      if (annotations.openWorldHint === true) {
+        badges.push('<span class="tool-annotation-badge annotation-external" title="Interacts with external systems">External</span>');
+      }
+
+      return badges.join(' ');
     }
 
     // ============================================

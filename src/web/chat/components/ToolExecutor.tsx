@@ -12,34 +12,50 @@ import { useToolExecution } from '../hooks';
 import { useSettings } from '../../settings';
 import type { ChatToolCall } from '../types';
 
-type WarningLevel = 'safe' | 'caution' | 'danger';
-
 /**
- * Get warning level for a tool based on its annotations.
+ * Get the reason why a tool requires confirmation.
+ * Returns null if tool can be auto-executed.
  */
-function getWarningLevel(annotations: ChatToolCall['annotations']): WarningLevel {
-  // No annotations = assume dangerous
-  if (!annotations) return 'danger';
+function getConfirmationReason(annotations: ChatToolCall['annotations']): string | null {
+  // No annotations = require confirmation (unknown behavior)
+  if (!annotations) {
+    return 'no annotations provided (unknown behavior)';
+  }
 
-  // Read-only tools are safe
-  if (annotations.readOnlyHint) return 'safe';
+  // Read-only tools are safe - no confirmation needed
+  if (annotations.readOnlyHint === true) {
+    return null;
+  }
 
   // Check destructive and idempotent hints (with defaults per MCP spec)
-  const isDestructive = annotations.destructiveHint !== false; // default true
-  const isIdempotent = annotations.idempotentHint === true; // default false
+  const isDestructive = annotations.destructiveHint !== false; // default true if not explicitly false
+  const isIdempotent = annotations.idempotentHint === true; // default false if not explicitly true
 
-  // Destructive, non-idempotent tools are dangerous
-  if (isDestructive && !isIdempotent) return 'danger';
+  // Destructive + non-idempotent = requires confirmation
+  if (isDestructive && !isIdempotent) {
+    const reasons: string[] = [];
+    if (annotations.destructiveHint === true) {
+      reasons.push('destructiveHint: true');
+    } else if (annotations.destructiveHint === undefined) {
+      reasons.push('destructiveHint: undefined (defaults to true)');
+    }
+    if (annotations.idempotentHint === false) {
+      reasons.push('idempotentHint: false');
+    } else if (annotations.idempotentHint === undefined) {
+      reasons.push('idempotentHint: undefined (defaults to false)');
+    }
+    return reasons.join(', ');
+  }
 
-  // Non-destructive or idempotent tools are caution
-  return 'caution';
+  // Non-destructive or idempotent tools can auto-execute
+  return null;
 }
 
 /**
- * Check if a tool requires confirmation based on warning level.
+ * Check if a tool requires confirmation.
  */
 function requiresConfirmation(toolCall: ChatToolCall): boolean {
-  return getWarningLevel(toolCall.annotations) === 'danger';
+  return getConfirmationReason(toolCall.annotations) !== null;
 }
 
 export function ToolExecutor() {
@@ -67,10 +83,11 @@ export function ToolExecutor() {
         const dangerousTools = pendingTools.filter((tc) => requiresConfirmation(tc));
 
         if (dangerousTools.length > 0) {
-          console.log(
-            '[ToolExecutor] Skipping dangerous tools (require confirmation):',
-            dangerousTools.map((t) => t.displayName)
-          );
+          console.log('[ToolExecutor] Tools requiring confirmation:');
+          for (const tool of dangerousTools) {
+            const reason = getConfirmationReason(tool.annotations);
+            console.log(`  - ${tool.displayName}: ${reason}`);
+          }
         }
 
         pendingTools = autoApproveTools;
