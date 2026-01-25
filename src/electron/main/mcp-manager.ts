@@ -43,6 +43,25 @@ import {
   type McpbPreviewResult,
 } from './mcpb/index.js';
 import * as channels from '../../shared/channels.js';
+
+// Import internal tool packages
+import {
+  MANAGE_TOOLS_TOOL as TOOL_MANAGER_TOOL,
+  getToolManagerUI,
+  TOOL_MANAGER_UI_URI,
+  handleManageTools,
+} from '@skilljack/internal-tool-manager';
+import {
+  SERVER_CONFIG_TOOL,
+  SERVER_CONFIG_ACTION_TOOLS,
+  ALL_SERVER_CONFIG_TOOLS,
+  getServerConfigUI,
+  getMcpbConfirmUI,
+  SERVER_CONFIG_UI_URI,
+  MCPB_CONFIRM_UI_URI,
+  createServerConfigHandler,
+  type ServerConfigDeps,
+} from '@skilljack/internal-server-config';
 import type {
   ServerSummary,
   ToolWithUIInfo,
@@ -146,271 +165,6 @@ class ToolManagerState {
 }
 
 // ============================================
-// Built-in Tool Manager Tool
-// ============================================
-
-const TOOL_MANAGER_TOOL: ToolWithUIInfo = {
-  name: 'tool-manager__manage-tools',
-  displayName: 'manage-tools',
-  description: 'SHOW or DISPLAY the tool manager UI. Use when user wants to SEE, VIEW, or SHOW available tools. Opens a visual panel to browse and toggle tools on/off.',
-  hasUi: true,
-  uiResourceUri: 'builtin://tool-manager',
-  serverName: 'tool-manager',
-  annotations: {
-    readOnlyHint: true,
-    openWorldHint: false,
-  },
-};
-
-const SERVER_CONFIG_TOOL: ToolWithUIInfo = {
-  name: 'server-config__configure-servers',
-  displayName: 'configure-servers',
-  description: 'SHOW or DISPLAY the server configuration UI. Use when user wants to SEE, VIEW, or SHOW server connections. Opens a visual panel to manage servers.',
-  hasUi: true,
-  uiResourceUri: 'builtin://server-config',
-  serverName: 'server-config',
-  annotations: {
-    readOnlyHint: true,
-    openWorldHint: false,
-  },
-};
-
-// ============================================
-// Server Config Action Tools (no UI, direct actions)
-// ============================================
-
-const SERVER_LIST_TOOL: ToolWithUIInfo = {
-  name: 'server-config__list-servers',
-  displayName: 'list-servers',
-  description: 'Get server status as text data. Use for checking connection status programmatically. If user wants to SEE/SHOW/VIEW servers visually, use configure-servers instead.',
-  inputSchema: {
-    type: 'object',
-    properties: {},
-    required: [],
-  },
-  hasUi: false,
-  serverName: 'server-config',
-  annotations: {
-    readOnlyHint: true,
-    openWorldHint: false,
-  },
-};
-
-const SERVER_ADD_TOOL: ToolWithUIInfo = {
-  name: 'server-config__add-server',
-  displayName: 'add-server',
-  description: 'Add a new MCP server connection. The server will be started automatically after adding.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      name: {
-        type: 'string',
-        description: 'Unique name for the server (e.g., "filesystem", "github")',
-      },
-      command: {
-        type: 'string',
-        description: 'Command to run (e.g., "npx", "node", "python")',
-      },
-      args: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Command arguments (e.g., ["-y", "@modelcontextprotocol/server-filesystem", "/home"])',
-      },
-      env: {
-        type: 'object',
-        additionalProperties: { type: 'string' },
-        description: 'Environment variables (e.g., {"GITHUB_TOKEN": "..."})',
-      },
-    },
-    required: ['name', 'command'],
-  },
-  hasUi: false,
-  serverName: 'server-config',
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: false,
-    openWorldHint: true,
-  },
-};
-
-const SERVER_REMOVE_TOOL: ToolWithUIInfo = {
-  name: 'server-config__remove-server',
-  displayName: 'remove-server',
-  description: 'Remove an MCP server from the configuration. The server will be disconnected.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      name: {
-        type: 'string',
-        description: 'Name of the server to remove',
-      },
-    },
-    required: ['name'],
-  },
-  hasUi: false,
-  serverName: 'server-config',
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-};
-
-const SERVER_RESTART_TOOL: ToolWithUIInfo = {
-  name: 'server-config__restart-server',
-  displayName: 'restart-server',
-  description: 'Restart an MCP server. Useful when a server becomes unresponsive or after configuration changes.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      name: {
-        type: 'string',
-        description: 'Name of the server to restart',
-      },
-    },
-    required: ['name'],
-  },
-  hasUi: false,
-  serverName: 'server-config',
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-};
-
-const SERVER_STOP_TOOL: ToolWithUIInfo = {
-  name: 'server-config__stop-server',
-  displayName: 'stop-server',
-  description: 'Stop a running MCP server. The server can be started again later.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      name: {
-        type: 'string',
-        description: 'Name of the server to stop',
-      },
-    },
-    required: ['name'],
-  },
-  hasUi: false,
-  serverName: 'server-config',
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-};
-
-const SERVER_START_TOOL: ToolWithUIInfo = {
-  name: 'server-config__start-server',
-  displayName: 'start-server',
-  description: 'Start a stopped MCP server.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      name: {
-        type: 'string',
-        description: 'Name of the server to start',
-      },
-    },
-    required: ['name'],
-  },
-  hasUi: false,
-  serverName: 'server-config',
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-};
-
-const SERVER_ENABLE_TOOL: ToolWithUIInfo = {
-  name: 'server-config__enable-server',
-  displayName: 'enable-server',
-  description: 'Enable a disabled MCP server. When enabled, the server\'s tools become available for use.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      name: {
-        type: 'string',
-        description: 'Name of the server to enable',
-      },
-    },
-    required: ['name'],
-  },
-  hasUi: false,
-  serverName: 'server-config',
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-};
-
-const SERVER_DISABLE_TOOL: ToolWithUIInfo = {
-  name: 'server-config__disable-server',
-  displayName: 'disable-server',
-  description: 'Disable an MCP server. When disabled, the server\'s tools will not be available for use.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      name: {
-        type: 'string',
-        description: 'Name of the server to disable',
-      },
-    },
-    required: ['name'],
-  },
-  hasUi: false,
-  serverName: 'server-config',
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
-};
-
-const SERVER_INSTALL_MCPB_TOOL: ToolWithUIInfo = {
-  name: 'server-config__install-mcpb',
-  displayName: 'install-mcpb',
-  description: 'Install an MCP server from an MCPB (MCP Bundle) file. Shows extension details and asks for confirmation before installing.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      mcpbPath: {
-        type: 'string',
-        description: 'Absolute path to the .mcpb file to install',
-      },
-    },
-    required: ['mcpbPath'],
-  },
-  hasUi: true,
-  uiResourceUri: 'builtin://mcpb-confirm',
-  serverName: 'server-config',
-};
-
-// All server-config action tools
-const SERVER_CONFIG_ACTION_TOOLS: ToolWithUIInfo[] = [
-  SERVER_LIST_TOOL,
-  SERVER_ADD_TOOL,
-  SERVER_REMOVE_TOOL,
-  SERVER_RESTART_TOOL,
-  SERVER_STOP_TOOL,
-  SERVER_START_TOOL,
-  SERVER_ENABLE_TOOL,
-  SERVER_DISABLE_TOOL,
-  SERVER_INSTALL_MCPB_TOOL,
-];
-
-// ============================================
 // MCP Manager Class
 // ============================================
 
@@ -419,6 +173,50 @@ export class McpManager {
   private toolState = new ToolManagerState();
   private mainWindow: BrowserWindow | null = null;
   private pendingMcpbPreview: McpbPreviewResult | null = null;
+  private serverConfigHandler: ReturnType<typeof createServerConfigHandler>;
+
+  constructor() {
+    // Create server config handler with dependencies
+    const deps: ServerConfigDeps = {
+      getServerConfigs: async () => {
+        const configs = await this.getServerConfigs();
+        // Ensure enabled is always boolean (required by handler interface)
+        return configs.map((c) => ({
+          ...c,
+          enabled: c.enabled ?? true,
+        }));
+      },
+      addServerConfig: (config) => this.addServerConfig(config),
+      removeServerConfig: (name) => this.removeServerConfig(name),
+      restartServer: (name) => this.restartServer(name),
+      stopServer: (name) => this.stopServer(name),
+      startServer: (name) => this.startServer(name),
+      setServerEnabled: (name, enabled) => { this.setServerEnabled(name, enabled); },
+      previewMcpb: async (mcpbPath: string) => {
+        const preview = await previewMcpb(mcpbPath);
+        return {
+          mcpbPath: preview.mcpbPath,
+          manifest: {
+            name: preview.manifest.name,
+            display_name: preview.manifest.display_name,
+            version: preview.manifest.version,
+          },
+          signature: preview.signature,
+          platformCompatible: preview.platformCompatible,
+          missingRequiredConfig: preview.missingRequiredConfig,
+        };
+      },
+      setPendingMcpbPreview: (preview) => {
+        // Store preview for later use - the UI will fetch it via getMcpbPreviewData
+        if (preview && typeof preview === 'object' && 'mcpbPath' in preview) {
+          previewMcpb((preview as { mcpbPath: string }).mcpbPath).then((p) => {
+            this.pendingMcpbPreview = p;
+          });
+        }
+      },
+    };
+    this.serverConfigHandler = createServerConfigHandler(deps);
+  }
 
   async initialize(): Promise<void> {
     // Try to load config from default locations
@@ -612,6 +410,35 @@ export class McpManager {
   // Tools (uses multi-server.ts aggregation)
   // ============================================
 
+  /**
+   * Convert a package tool (with Zod schema) to ToolWithUIInfo (with JSON Schema).
+   * This handles the difference between the package's Zod-based schemas and the app's expected format.
+   */
+  private convertPackageTool(tool: {
+    name: string;
+    displayName: string;
+    title?: string;
+    description: string;
+    inputSchema?: unknown;
+    hasUi: boolean;
+    uiResourceUri?: string;
+    serverName: string;
+    annotations?: Record<string, unknown>;
+  }): ToolWithUIInfo {
+    return {
+      name: tool.name,
+      displayName: tool.displayName,
+      description: tool.description,
+      inputSchema: tool.inputSchema && typeof (tool.inputSchema as { _def?: unknown })._def === 'object'
+        ? undefined  // Zod schema - let the caller use the Zod validation
+        : tool.inputSchema as Record<string, unknown> | undefined,
+      hasUi: tool.hasUi,
+      uiResourceUri: tool.uiResourceUri,
+      serverName: tool.serverName,
+      annotations: tool.annotations,
+    };
+  }
+
   async getTools(options?: { hasUi?: boolean }): Promise<ToolWithUIInfo[]> {
     const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
     const allTools = await aggregateTools(clients);
@@ -622,258 +449,76 @@ export class McpManager {
       toolsWithUI = toolsWithUI.filter((t) => t.hasUi);
     }
 
+    // Convert built-in tools from packages (with Zod schemas) to app format
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const builtInTools: ToolWithUIInfo[] = [
+      this.convertPackageTool(TOOL_MANAGER_TOOL as any),
+      this.convertPackageTool(SERVER_CONFIG_TOOL as any),
+      ...SERVER_CONFIG_ACTION_TOOLS.map((t) => this.convertPackageTool(t as any)),
+    ];
+
     // Add built-in tools and filter disabled tools
     return [
-      TOOL_MANAGER_TOOL,
-      SERVER_CONFIG_TOOL,
-      ...SERVER_CONFIG_ACTION_TOOLS,
+      ...builtInTools,
       ...this.toolState.filterEnabledTools(toolsWithUI),
     ];
   }
 
   async callTool(name: string, args: Record<string, unknown>): Promise<ToolCallResult> {
-    // Handle built-in tool-manager
+    // Handle built-in tool-manager using imported handler
     if (name === 'tool-manager__manage-tools') {
+      const result = handleManageTools();
       return {
-        content: [{ type: 'text', text: 'Tool manager opened.', annotations: { audience: ['user'], priority: 0.7 } }],
+        content: result.content,
         serverName: 'tool-manager',
       };
     }
 
-    // Handle built-in server-config
-    if (name === 'server-config__configure-servers') {
-      return {
-        content: [{ type: 'text', text: 'Server configuration opened.', annotations: { audience: ['user'], priority: 0.7 } }],
-        serverName: 'server-config',
-      };
-    }
-
-    // Handle server-config action tools
-    if (name === 'server-config__list-servers') {
-      const servers = await this.getServerConfigs();
-      const summary = servers.map(s =>
-        `- **${s.name}**: ${s.status} (${s.toolCount} tools)${s.lastError ? ` - Error: ${s.lastError}` : ''}`
-      ).join('\n');
-      return {
-        content: [{
-          type: 'text',
-          text: servers.length > 0
-            ? `## Connected Servers\n\n${summary}`
-            : 'No servers configured. Use add-server to add one.',
-          annotations: { audience: ['assistant'], priority: 0.7 },
-        }],
-        serverName: 'server-config',
-      };
-    }
-
-    if (name === 'server-config__add-server') {
-      const { name: serverName, command, args: serverArgs, env } = args as {
-        name: string;
-        command: string;
-        args?: string[];
-        env?: Record<string, string>;
-      };
-      if (!serverName || !command) {
-        return {
-          content: [{ type: 'text', text: `Missing required parameter: ${!serverName ? 'name' : 'command'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
+    // Handle server-config tools using the imported handler
+    if (name.startsWith('server-config__')) {
+      // Special handling for install-mcpb to store preview data
+      if (name === 'server-config__install-mcpb') {
+        const { mcpbPath } = args as { mcpbPath: string };
+        if (!mcpbPath) {
+          return {
+            content: [{ type: 'text', text: 'Missing required parameter: mcpbPath' }],
+            serverName: 'server-config',
+            isError: true,
+          };
+        }
+        try {
+          // Preview the MCPB and store for UI access
+          const preview = await previewMcpb(mcpbPath);
+          this.pendingMcpbPreview = preview;
+          const displayInfo = getManifestDisplayInfo(preview.manifest);
+          return {
+            content: [{
+              type: 'text',
+              text: `Opening installation dialog for "${displayInfo.displayName}" v${displayInfo.version}...`,
+            }],
+            serverName: 'server-config',
+          };
+        } catch (err) {
+          return {
+            content: [{ type: 'text', text: `Failed to preview MCPB: ${err instanceof Error ? err.message : 'Unknown error'}` }],
+            serverName: 'server-config',
+            isError: true,
+          };
+        }
       }
-      try {
-        await this.addServerConfig({ name: serverName, command, args: serverArgs, env });
+
+      // Delegate to the imported handler for all other server-config tools
+      const result = await this.serverConfigHandler(name, args);
+      if (result) {
         return {
-          content: [{ type: 'text', text: `Server "${serverName}" added and starting...`, annotations: { audience: ['user'], priority: 0.7 } }],
-          serverName: 'server-config',
-        };
-      } catch (err) {
-        return {
-          content: [{ type: 'text', text: `Failed to add server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
+          content: result.content,
+          isError: result.isError,
+          serverName: result.serverName,
         };
       }
     }
 
-    if (name === 'server-config__remove-server') {
-      const { name: serverName } = args as { name: string };
-      if (!serverName) {
-        return {
-          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-      try {
-        await this.removeServerConfig(serverName);
-        return {
-          content: [{ type: 'text', text: `Server "${serverName}" removed.`, annotations: { audience: ['user'], priority: 0.7 } }],
-          serverName: 'server-config',
-        };
-      } catch (err) {
-        return {
-          content: [{ type: 'text', text: `Failed to remove server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-    }
-
-    if (name === 'server-config__restart-server') {
-      const { name: serverName } = args as { name: string };
-      if (!serverName) {
-        return {
-          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-      try {
-        await this.restartServer(serverName);
-        return {
-          content: [{ type: 'text', text: `Server "${serverName}" is restarting...`, annotations: { audience: ['user'], priority: 0.7 } }],
-          serverName: 'server-config',
-        };
-      } catch (err) {
-        return {
-          content: [{ type: 'text', text: `Failed to restart server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-    }
-
-    if (name === 'server-config__stop-server') {
-      const { name: serverName } = args as { name: string };
-      if (!serverName) {
-        return {
-          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-      try {
-        await this.stopServer(serverName);
-        return {
-          content: [{ type: 'text', text: `Server "${serverName}" stopped.`, annotations: { audience: ['user'], priority: 0.7 } }],
-          serverName: 'server-config',
-        };
-      } catch (err) {
-        return {
-          content: [{ type: 'text', text: `Failed to stop server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-    }
-
-    if (name === 'server-config__start-server') {
-      const { name: serverName } = args as { name: string };
-      if (!serverName) {
-        return {
-          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-      try {
-        await this.startServer(serverName);
-        return {
-          content: [{ type: 'text', text: `Server "${serverName}" starting...`, annotations: { audience: ['user'], priority: 0.7 } }],
-          serverName: 'server-config',
-        };
-      } catch (err) {
-        return {
-          content: [{ type: 'text', text: `Failed to start server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-    }
-
-    if (name === 'server-config__enable-server') {
-      const { name: serverName } = args as { name: string };
-      if (!serverName) {
-        return {
-          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-      try {
-        this.setServerEnabled(serverName, true);
-        return {
-          content: [{ type: 'text', text: `Server "${serverName}" has been enabled. Its tools are now available.`, annotations: { audience: ['user'], priority: 0.7 } }],
-          serverName: 'server-config',
-        };
-      } catch (err) {
-        return {
-          content: [{ type: 'text', text: `Failed to enable server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-    }
-
-    if (name === 'server-config__disable-server') {
-      const { name: serverName } = args as { name: string };
-      if (!serverName) {
-        return {
-          content: [{ type: 'text', text: 'Missing required parameter: name', annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-      try {
-        this.setServerEnabled(serverName, false);
-        return {
-          content: [{ type: 'text', text: `Server "${serverName}" has been disabled. Its tools are no longer available.`, annotations: { audience: ['user'], priority: 0.7 } }],
-          serverName: 'server-config',
-        };
-      } catch (err) {
-        return {
-          content: [{ type: 'text', text: `Failed to disable server: ${err instanceof Error ? err.message : 'Unknown error'}`, annotations: { audience: ['user', 'assistant'], priority: 1.0 } }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-    }
-
-    // Handle MCPB installation tool - this triggers the confirmation UI
-    if (name === 'server-config__install-mcpb') {
-      const { mcpbPath } = args as { mcpbPath: string };
-      if (!mcpbPath) {
-        return {
-          content: [{ type: 'text', text: 'Missing required parameter: mcpbPath' }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-      try {
-        // Preview the MCPB to get manifest and signature info
-        const preview = await previewMcpb(mcpbPath);
-        const displayInfo = getManifestDisplayInfo(preview.manifest);
-
-        // Store the preview data for the UI to access
-        this.pendingMcpbPreview = preview;
-
-        // Return a message - the UI will be shown automatically due to hasUi: true
-        return {
-          content: [{
-            type: 'text',
-            text: `Opening installation dialog for "${displayInfo.displayName}" v${displayInfo.version}...`,
-          }],
-          serverName: 'server-config',
-        };
-      } catch (err) {
-        return {
-          content: [{ type: 'text', text: `Failed to preview MCPB: ${err instanceof Error ? err.message : 'Unknown error'}` }],
-          serverName: 'server-config',
-          isError: true,
-        };
-      }
-    }
-
+    // Handle external MCP server tools
     const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
     const { serverName, result } = await callTool(clients, name, args, {
       timeout: 120000,
@@ -946,113 +591,58 @@ export class McpManager {
   }
 
   async getUIResource(serverName: string, uri: string): Promise<UIResource | null> {
-    // Handle built-in tool-manager UI
-    if (serverName === 'tool-manager' && uri === 'builtin://tool-manager') {
+    // Handle built-in tool-manager UI using imported loader
+    if (serverName === 'tool-manager' && uri === TOOL_MANAGER_UI_URI) {
       try {
-        // In development, the file is in src/web/static/
-        // In production, it would be in the app resources
-        const appPath = app.getAppPath();
-        const possiblePaths = [
-          // Development: relative to app root
-          join(appPath, 'src/web/static/tool-manager/mcp-app.html'),
-          // Production: in resources folder
-          join(appPath, 'resources/tool-manager/mcp-app.html'),
-          // Fallback: relative to __dirname (original path)
-          join(__dirname, '../../web/static/tool-manager/mcp-app.html'),
-          join(__dirname, '../../../src/web/static/tool-manager/mcp-app.html'),
-        ];
-
-        for (const htmlPath of possiblePaths) {
-          if (existsSync(htmlPath)) {
-            const html = await readFile(htmlPath, 'utf-8');
-            log.info('[McpManager] Loaded tool-manager UI from:', htmlPath);
-            return {
-              uri,
-              mimeType: 'text/html;mcp-app',
-              text: html,
-              serverName: 'tool-manager',
-            };
-          }
-        }
-
-        log.warn('[McpManager] Tool-manager UI not found. Tried paths:', possiblePaths);
-        return null;
+        const html = getToolManagerUI();
+        log.info('[McpManager] Loaded tool-manager UI from package');
+        return {
+          uri,
+          mimeType: 'text/html;mcp-app',
+          text: html,
+          serverName: 'tool-manager',
+        };
       } catch (err) {
         log.error('[McpManager] Failed to load tool-manager UI:', err);
         return null;
       }
     }
 
-    // Handle built-in server-config UI
-    if (serverName === 'server-config' && uri === 'builtin://server-config') {
+    // Handle built-in server-config UI using imported loader
+    if (serverName === 'server-config' && uri === SERVER_CONFIG_UI_URI) {
       try {
-        const appPath = app.getAppPath();
-        const possiblePaths = [
-          // Development: relative to app root
-          join(appPath, 'src/web/static/server-config/mcp-app.html'),
-          // Production: in resources folder
-          join(appPath, 'resources/server-config/mcp-app.html'),
-          // Fallback: relative to __dirname
-          join(__dirname, '../../web/static/server-config/mcp-app.html'),
-          join(__dirname, '../../../src/web/static/server-config/mcp-app.html'),
-        ];
-
-        for (const htmlPath of possiblePaths) {
-          if (existsSync(htmlPath)) {
-            const html = await readFile(htmlPath, 'utf-8');
-            log.info('[McpManager] Loaded server-config UI from:', htmlPath);
-            return {
-              uri,
-              mimeType: 'text/html;mcp-app',
-              text: html,
-              serverName: 'server-config',
-            };
-          }
-        }
-
-        log.warn('[McpManager] Server-config UI not found. Tried paths:', possiblePaths);
-        return null;
+        const html = getServerConfigUI();
+        log.info('[McpManager] Loaded server-config UI from package');
+        return {
+          uri,
+          mimeType: 'text/html;mcp-app',
+          text: html,
+          serverName: 'server-config',
+        };
       } catch (err) {
         log.error('[McpManager] Failed to load server-config UI:', err);
         return null;
       }
     }
 
-    // Handle built-in mcpb-confirm UI
-    if (serverName === 'server-config' && uri === 'builtin://mcpb-confirm') {
+    // Handle built-in mcpb-confirm UI using imported loader
+    if (serverName === 'server-config' && uri === MCPB_CONFIRM_UI_URI) {
       try {
-        const appPath = app.getAppPath();
-        const possiblePaths = [
-          // Development: relative to app root
-          join(appPath, 'src/web/static/mcpb-confirm/mcp-app.html'),
-          // Production: in resources folder
-          join(appPath, 'resources/mcpb-confirm/mcp-app.html'),
-          // Fallback: relative to __dirname
-          join(__dirname, '../../web/static/mcpb-confirm/mcp-app.html'),
-          join(__dirname, '../../../src/web/static/mcpb-confirm/mcp-app.html'),
-        ];
-
-        for (const htmlPath of possiblePaths) {
-          if (existsSync(htmlPath)) {
-            const html = await readFile(htmlPath, 'utf-8');
-            log.info('[McpManager] Loaded mcpb-confirm UI from:', htmlPath);
-            return {
-              uri,
-              mimeType: 'text/html;mcp-app',
-              text: html,
-              serverName: 'server-config',
-            };
-          }
-        }
-
-        log.warn('[McpManager] mcpb-confirm UI not found. Tried paths:', possiblePaths);
-        return null;
+        const html = getMcpbConfirmUI();
+        log.info('[McpManager] Loaded mcpb-confirm UI from package');
+        return {
+          uri,
+          mimeType: 'text/html;mcp-app',
+          text: html,
+          serverName: 'server-config',
+        };
       } catch (err) {
         log.error('[McpManager] Failed to load mcpb-confirm UI:', err);
         return null;
       }
     }
 
+    // Handle external MCP server resources
     const clients = this.lifecycleManager?.getConnectedClients() ?? new Map();
     const client = clients.get(serverName);
     if (!client) {

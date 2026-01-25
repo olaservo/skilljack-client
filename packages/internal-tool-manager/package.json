@@ -1,0 +1,58 @@
+{
+  "name": "@skilljack/internal-tool-manager",
+  "version": "0.1.0",
+  "description": "Built-in tool manager for MCP clients - dual-use as standalone server or internal import",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "internal-tool-manager": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "author": "Ola Hungerford",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/olaservo/skilljack-client.git",
+    "directory": "packages/internal-tool-manager"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "tool-manager",
+    "mcp-server"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "tsc && shx cp -r src/ui/*.html dist/ui/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.1",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "shx": "^0.3.4",
+    "typescript": "^5.7.2",
+    "vitest": "^2.0.0"
+  }
+}
