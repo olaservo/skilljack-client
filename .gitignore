@@ -30,6 +30,13 @@ Thumbs.db
 # Build artifacts
 src/web/static/chat/bundle.*
 .vite/
+out/
+
+# Electron Forge output
+*.mcpb
+
+# Windows artifacts
+nul
 
 # Documentation (local only)
 docs/architecture-plan.md
