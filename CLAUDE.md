@@ -60,3 +60,11 @@ The internal packages (`internal-tool-manager`, `internal-server-config`) suppor
 - `getServerConfigUI()` - Server config UI loader
 - `getMcpbConfirmUI()` - MCPB confirmation UI loader
 - `SERVER_CONFIG_UI_URI`, `MCPB_CONFIRM_UI_URI` - Resource URI constants
+
+### UI HTML Files
+
+The UI HTML files exist in two locations:
+- `packages/*/src/ui/` - Used by standalone server mode (read from disk at runtime)
+- `src/electron/main/ui/` - Used by Electron app (embedded via Vite's `?raw` import at build time)
+
+When modifying UI, update both copies to keep them in sync.

@@ -47,7 +47,6 @@ import * as channels from '../../shared/channels.js';
 // Import internal tool packages
 import {
   MANAGE_TOOLS_TOOL as TOOL_MANAGER_TOOL,
-  getToolManagerUI,
   TOOL_MANAGER_UI_URI,
   handleManageTools,
 } from '@skilljack/internal-tool-manager';
@@ -55,13 +54,19 @@ import {
   SERVER_CONFIG_TOOL,
   SERVER_CONFIG_ACTION_TOOLS,
   ALL_SERVER_CONFIG_TOOLS,
-  getServerConfigUI,
-  getMcpbConfirmUI,
   SERVER_CONFIG_UI_URI,
   MCPB_CONFIRM_UI_URI,
   createServerConfigHandler,
   type ServerConfigDeps,
 } from '@skilljack/internal-server-config';
+
+// Import UI HTML files using Vite's raw import (embedded at build time)
+// @ts-expect-error - Vite raw import
+import TOOL_MANAGER_UI_HTML from './ui/tool-manager.html?raw';
+// @ts-expect-error - Vite raw import
+import SERVER_CONFIG_UI_HTML from './ui/server-config.html?raw';
+// @ts-expect-error - Vite raw import
+import MCPB_CONFIRM_UI_HTML from './ui/mcpb-confirm.html?raw';
 import type {
   ServerSummary,
   ToolWithUIInfo,
@@ -591,55 +596,34 @@ export class McpManager {
   }
 
   async getUIResource(serverName: string, uri: string): Promise<UIResource | null> {
-    // Handle built-in tool-manager UI using imported loader
+    // Handle built-in tool-manager UI (embedded via Vite raw import)
     if (serverName === 'tool-manager' && uri === TOOL_MANAGER_UI_URI) {
-      try {
-        const html = getToolManagerUI();
-        log.info('[McpManager] Loaded tool-manager UI from package');
-        return {
-          uri,
-          mimeType: 'text/html;mcp-app',
-          text: html,
-          serverName: 'tool-manager',
-        };
-      } catch (err) {
-        log.error('[McpManager] Failed to load tool-manager UI:', err);
-        return null;
-      }
+      return {
+        uri,
+        mimeType: 'text/html;mcp-app',
+        text: TOOL_MANAGER_UI_HTML,
+        serverName: 'tool-manager',
+      };
     }
 
-    // Handle built-in server-config UI using imported loader
+    // Handle built-in server-config UI (embedded via Vite raw import)
     if (serverName === 'server-config' && uri === SERVER_CONFIG_UI_URI) {
-      try {
-        const html = getServerConfigUI();
-        log.info('[McpManager] Loaded server-config UI from package');
-        return {
-          uri,
-          mimeType: 'text/html;mcp-app',
-          text: html,
-          serverName: 'server-config',
-        };
-      } catch (err) {
-        log.error('[McpManager] Failed to load server-config UI:', err);
-        return null;
-      }
+      return {
+        uri,
+        mimeType: 'text/html;mcp-app',
+        text: SERVER_CONFIG_UI_HTML,
+        serverName: 'server-config',
+      };
     }
 
-    // Handle built-in mcpb-confirm UI using imported loader
+    // Handle built-in mcpb-confirm UI (embedded via Vite raw import)
     if (serverName === 'server-config' && uri === MCPB_CONFIRM_UI_URI) {
-      try {
-        const html = getMcpbConfirmUI();
-        log.info('[McpManager] Loaded mcpb-confirm UI from package');
-        return {
-          uri,
-          mimeType: 'text/html;mcp-app',
-          text: html,
-          serverName: 'server-config',
-        };
-      } catch (err) {
-        log.error('[McpManager] Failed to load mcpb-confirm UI:', err);
-        return null;
-      }
+      return {
+        uri,
+        mimeType: 'text/html;mcp-app',
+        text: MCPB_CONFIRM_UI_HTML,
+        serverName: 'server-config',
+      };
     }
 
     // Handle external MCP server resources

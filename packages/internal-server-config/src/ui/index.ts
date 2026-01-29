@@ -1,5 +1,8 @@
 /**
  * UI Resource Loaders for internal-server-config
+ *
+ * For standalone server mode, reads HTML from file.
+ * When bundled into Electron app, the main app handles UI loading directly.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
