@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>Install MCPB Extension</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --bg-secondary: #16213e;
+      --bg-tertiary: #0f1729;
+      --text: #e8e8e8;
+      --text-secondary: #a0a0a0;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --border: #2a2a4a;
+      --success: #22c55e;
+      --warning: #eab308;
+      --error: #ef4444;
+      --info: #3b82f6;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #ffffff;
+        --bg-secondary: #f5f5f5;
+        --bg-tertiary: #e8e8e8;
+        --text: #1a1a1a;
+        --text-secondary: #666666;
+        --border: #e0e0e0;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+      min-height: 100vh;
+      overflow-y: auto;
+    }
+
+    .header {
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* Signature Badge */
+    .signature-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 16px;
+    }
+
+    .signature-badge.signed {
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+      border: 1px solid var(--success);
+    }
+
+    .signature-badge.self-signed {
+      background: rgba(234, 179, 8, 0.15);
+      color: var(--warning);
+      border: 1px solid var(--warning);
+    }
+
+    .signature-badge.unsigned {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--error);
+      border: 1px solid var(--error);
+    }
+
+    .signature-icon {
+      font-size: 14px;
+    }
+
+    .signature-details {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    /* Info Card */
+    .info-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+
+    .info-row {
+      display: flex;
+      margin-bottom: 8px;
+    }
+
+    .info-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .info-label {
+      width: 80px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .info-value {
+      font-size: 12px;
+      word-break: break-word;
+    }
+
+    /* Tools List */
+    .tools-section {
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .tools-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tool-badge {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-family: 'Fira Code', monospace;
+    }
+
+    .tools-none {
+      font-size: 12px;
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+
+    /* User Config Form */
+    .config-section {
+      margin-bottom: 16px;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .form-group label .required {
+      color: var(--error);
+    }
+
+    .form-group input[type="text"],
+    .form-group input[type="password"],
+    .form-group input[type="number"] {
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: 'Fira Code', monospace;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .form-group .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .form-group input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent);
+    }
+
+    .form-hint {
+      font-size: 10px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    .path-input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .path-input-row input {
+      flex: 1;
+    }
+
+    .browse-btn {
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .browse-btn:hover {
+      background: var(--border);
+    }
+
+    /* Warning Box */
+    .warning-box {
+      background: rgba(234, 179, 8, 0.1);
+      border: 1px solid var(--warning);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      color: var(--warning);
+    }
+
+    .warning-box strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    /* Platform Warning */
+    .platform-error {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid var(--error);
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      color: var(--error);
+    }
+
+    /* Buttons */
+    .button-row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    .btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--border);
+    }
+
+    /* Loading State */
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+
+    .error {
+      text-align: center;
+      padding: 40px;
+      color: var(--error);
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 12px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      z-index: 200;
+      display: none;
+    }
+
+    .toast.success {
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .toast.error {
+      border-color: var(--error);
+      color: var(--error);
+    }
+
+    .toast.visible {
+      display: block;
+      animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="content">
+    <div class="loading">Loading extension details...</div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // State
+    let previewData = null;
+    let userConfigValues = {};
+    let useJsonRpc = false;
+    let rpcRequestId = 1;
+    const pendingRequests = new Map();
+
+    // Get host origin
+    const hostOrigin = window.__HOST_ORIGIN__
+      || (document.referrer ? new URL(document.referrer).origin : window.location.origin);
+
+    // Detect if we're in an iframe
+    const isInIframe = window.parent !== window;
+
+    // Elements
+    const content = document.getElementById('content');
+    const toast = document.getElementById('toast');
+
+    // ============================================
+    // JSON-RPC Communication
+    // ============================================
+
+    function sendRpcRequest(method, params = {}) {
+      return new Promise((resolve, reject) => {
+        const id = rpcRequestId++;
+        pendingRequests.set(id, { resolve, reject });
+
+        window.parent.postMessage({
+          jsonrpc: '2.0',
+          id,
+          method,
+          params
+        }, '*');
+
+        setTimeout(() => {
+          if (pendingRequests.has(id)) {
+            pendingRequests.delete(id);
+            reject(new Error('Request timeout'));
+          }
+        }, 30000); // Longer timeout for installation
+      });
+    }
+
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+      if (!data || typeof data !== 'object') return;
+
+      // Handle JSON-RPC response
+      if (data.jsonrpc === '2.0' && data.id && pendingRequests.has(data.id)) {
+        const { resolve, reject } = pendingRequests.get(data.id);
+        pendingRequests.delete(data.id);
+
+        if (data.error) {
+          reject(new Error(data.error.message || 'RPC error'));
+        } else {
+          resolve(data.result);
+        }
+        return;
+      }
+
+      // Handle initial data from parent
+      if (data.type === 'mcpb-preview-data') {
+        previewData = data.preview;
+        renderPreview();
+      }
+    });
+
+    // ============================================
+    // Rendering
+    // ============================================
+
+    function renderPreview() {
+      if (!previewData) {
+        content.innerHTML = '<div class="error">No preview data available</div>';
+        return;
+      }
+
+      const { manifest, signature, platformCompatible, missingRequiredConfig, mcpbPath } = previewData;
+      const displayInfo = getDisplayInfo(manifest);
+
+      // Initialize user config values with defaults
+      for (const field of displayInfo.userConfigFields) {
+        if (field.default !== undefined && field.default !== null) {
+          userConfigValues[field.key] = field.default;
+        }
+      }
+
+      let html = `
+        <div class="header">
+          <h1>Install Extension</h1>
+          <div class="subtitle">${escapeHtml(mcpbPath)}</div>
+        </div>
+
+        <!-- Signature Badge -->
+        <div class="signature-badge ${signature.status}">
+          <span class="signature-icon">${getSignatureIcon(signature.status)}</span>
+          <span>${getSignatureLabel(signature.status)}</span>
+        </div>
+        ${signature.publisher ? `<div class="signature-details">Publisher: ${escapeHtml(signature.publisher)}</div>` : ''}
+
+        <!-- Platform Warning -->
+        ${!platformCompatible ? `
+          <div class="platform-error">
+            <strong>Platform Not Supported</strong>
+            This extension is not compatible with your platform (${process.platform || 'unknown'}).
+          </div>
+        ` : ''}
+
+        <!-- Unsigned Warning -->
+        ${signature.status === 'unsigned' ? `
+          <div class="warning-box">
+            <strong>Unverified Extension</strong>
+            This extension is not signed. Only install extensions from sources you trust.
+          </div>
+        ` : ''}
+
+        <!-- Extension Info -->
+        <div class="info-card">
+          <div class="info-row">
+            <span class="info-label">Name:</span>
+            <span class="info-value">${escapeHtml(displayInfo.displayName)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Version:</span>
+            <span class="info-value">${escapeHtml(displayInfo.version)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Author:</span>
+            <span class="info-value">${escapeHtml(displayInfo.author)}</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">Description:</span>
+            <span class="info-value">${escapeHtml(displayInfo.description)}</span>
+          </div>
+        </div>
+
+        <!-- Tools -->
+        <div class="tools-section">
+          <div class="section-title">Tools (${displayInfo.tools.length})</div>
+          ${displayInfo.tools.length > 0 ? `
+            <div class="tools-list">
+              ${displayInfo.tools.map(t => `<span class="tool-badge">${escapeHtml(t.name)}</span>`).join('')}
+            </div>
+          ` : '<div class="tools-none">No tools declared (may provide tools at runtime)</div>'}
+        </div>
+
+        <!-- User Configuration -->
+        ${displayInfo.hasUserConfig ? `
+          <div class="config-section">
+            <div class="section-title">Configuration</div>
+            ${displayInfo.userConfigFields.map(field => renderConfigField(field)).join('')}
+          </div>
+        ` : ''}
+
+        <!-- Buttons -->
+        <div class="button-row">
+          <button class="btn btn-secondary" onclick="cancel()">Cancel</button>
+          <button class="btn btn-primary" id="install-btn" onclick="install()" ${!platformCompatible ? 'disabled' : ''}>
+            Install
+          </button>
+        </div>
+      `;
+
+      content.innerHTML = html;
+
+      // Add event listeners to form fields
+      for (const field of displayInfo.userConfigFields) {
+        const input = document.getElementById(`config-${field.key}`);
+        if (input) {
+          input.addEventListener('change', (e) => {
+            updateConfigValue(field.key, field.type, e.target);
+          });
+          input.addEventListener('input', (e) => {
+            updateConfigValue(field.key, field.type, e.target);
+            validateForm();
+          });
+        }
+      }
+
+      validateForm();
+    }
+
+    function renderConfigField(field) {
+      const inputId = `config-${field.key}`;
+      const required = field.required ? '<span class="required">*</span>' : '';
+      const defaultValue = field.default !== undefined ? field.default : '';
+
+      switch (field.type) {
+        case 'boolean':
+          return `
+            <div class="form-group">
+              <div class="checkbox-row">
+                <input type="checkbox" id="${inputId}" ${defaultValue ? 'checked' : ''}>
+                <label for="${inputId}">${escapeHtml(field.title)} ${required}</label>
+              </div>
+              <div class="form-hint">${escapeHtml(field.description)}</div>
+            </div>
+          `;
+
+        case 'number':
+          return `
+            <div class="form-group">
+              <label for="${inputId}">${escapeHtml(field.title)} ${required}</label>
+              <input type="number" id="${inputId}" value="${defaultValue}"
+                ${field.min !== undefined ? `min="${field.min}"` : ''}
+                ${field.max !== undefined ? `max="${field.max}"` : ''}>
+              <div class="form-hint">${escapeHtml(field.description)}</div>
+            </div>
+          `;
+
+        case 'directory':
+        case 'file':
+          return `
+            <div class="form-group">
+              <label for="${inputId}">${escapeHtml(field.title)} ${required}</label>
+              <div class="path-input-row">
+                <input type="text" id="${inputId}" value="${escapeHtml(String(defaultValue))}" placeholder="Enter path...">
+                <button class="browse-btn" onclick="browsePath('${field.key}', '${field.type}')">Browse</button>
+              </div>
+              <div class="form-hint">${escapeHtml(field.description)}</div>
+            </div>
+          `;
+
+        case 'string':
+        default:
+          const inputType = field.sensitive ? 'password' : 'text';
+          return `
+            <div class="form-group">
+              <label for="${inputId}">${escapeHtml(field.title)} ${required}</label>
+              <input type="${inputType}" id="${inputId}" value="${escapeHtml(String(defaultValue))}"
+                placeholder="${field.sensitive ? 'Enter value...' : ''}">
+              <div class="form-hint">${escapeHtml(field.description)}</div>
+            </div>
+          `;
+      }
+    }
+
+    function updateConfigValue(key, type, input) {
+      if (type === 'boolean') {
+        userConfigValues[key] = input.checked;
+      } else if (type === 'number') {
+        userConfigValues[key] = input.value ? Number(input.value) : undefined;
+      } else {
+        userConfigValues[key] = input.value || undefined;
+      }
+    }
+
+    function validateForm() {
+      if (!previewData) return;
+
+      const displayInfo = getDisplayInfo(previewData.manifest);
+      const installBtn = document.getElementById('install-btn');
+      if (!installBtn) return;
+
+      // Check all required fields
+      let valid = true;
+      for (const field of displayInfo.userConfigFields) {
+        if (field.required) {
+          const value = userConfigValues[field.key];
+          if (value === undefined || value === null || value === '') {
+            valid = false;
+            break;
+          }
+        }
+      }
+
+      installBtn.disabled = !valid || !previewData.platformCompatible;
+    }
+
+    function getDisplayInfo(manifest) {
+      const userConfigFields = [];
+
+      if (manifest.user_config) {
+        for (const [key, option] of Object.entries(manifest.user_config)) {
+          userConfigFields.push({
+            key,
+            type: option.type,
+            title: option.title,
+            description: option.description,
+            required: option.required || false,
+            sensitive: option.sensitive || false,
+            default: option.default,
+            min: option.min,
+            max: option.max,
+          });
+        }
+      }
+
+      return {
+        name: manifest.name,
+        displayName: manifest.display_name || manifest.name,
+        version: manifest.version,
+        description: manifest.description,
+        author: manifest.author?.name || 'Unknown',
+        tools: manifest.tools || [],
+        hasUserConfig: userConfigFields.length > 0,
+        userConfigFields,
+      };
+    }
+
+    function getSignatureIcon(status) {
+      switch (status) {
+        case 'signed': return '&#10004;'; // Checkmark
+        case 'self-signed': return '&#9888;'; // Warning
+        case 'unsigned': return '&#10006;'; // X
+        default: return '?';
+      }
+    }
+
+    function getSignatureLabel(status) {
+      switch (status) {
+        case 'signed': return 'Signed by trusted publisher';
+        case 'self-signed': return 'Self-signed certificate';
+        case 'unsigned': return 'Not signed';
+        default: return 'Unknown';
+      }
+    }
+
+    // ============================================
+    // Actions
+    // ============================================
+
+    async function install() {
+      if (!previewData) return;
+
+      const installBtn = document.getElementById('install-btn');
+      if (installBtn) {
+        installBtn.disabled = true;
+        installBtn.textContent = 'Installing...';
+      }
+
+      try {
+        // Clean up userConfigValues - remove undefined values
+        const cleanConfig = {};
+        for (const [key, value] of Object.entries(userConfigValues)) {
+          if (value !== undefined && value !== null && value !== '') {
+            cleanConfig[key] = value;
+          }
+        }
+
+        await sendRpcRequest('mcpb/confirmInstall', {
+          mcpbPath: previewData.mcpbPath,
+          userConfig: cleanConfig,
+        });
+
+        showToast('Extension installed successfully!', 'success');
+
+        // Close after a short delay
+        setTimeout(() => {
+          sendRpcRequest('mcpb/close');
+        }, 1500);
+      } catch (err) {
+        showToast(err.message || 'Installation failed', 'error');
+        if (installBtn) {
+          installBtn.disabled = false;
+          installBtn.textContent = 'Install';
+        }
+      }
+    }
+
+    function cancel() {
+      sendRpcRequest('mcpb/close');
+    }
+
+    async function browsePath(key, type) {
+      try {
+        const result = await sendRpcRequest('mcpb/browsePath', { type });
+        if (result && result.path) {
+          const input = document.getElementById(`config-${key}`);
+          if (input) {
+            input.value = result.path;
+            userConfigValues[key] = result.path;
+            validateForm();
+          }
+        }
+      } catch (err) {
+        console.error('Browse failed:', err);
+      }
+    }
+
+    // ============================================
+    // Utilities
+    // ============================================
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[c]);
+    }
+
+    function showToast(message, type = 'success') {
+      toast.textContent = message;
+      toast.className = `toast ${type} visible`;
+      setTimeout(() => {
+        toast.classList.remove('visible');
+      }, 3000);
+    }
+
+    // ============================================
+    // Initialize
+    // ============================================
+
+    if (isInIframe) {
+      useJsonRpc = true;
+      // Request preview data from parent
+      sendRpcRequest('mcpb/getPreviewData').then(data => {
+        previewData = data;
+        renderPreview();
+      }).catch(err => {
+        content.innerHTML = `<div class="error">Failed to load preview: ${escapeHtml(err.message)}</div>`;
+      });
+    }
+  </script>
+</body>
+</html>
