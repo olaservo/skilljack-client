@@ -944,6 +944,7 @@ export class McpManager {
         hasUi: !!uiResourceUri,
         uiResourceUri,
         serverName: tool.serverName,
+        annotations: tool.annotations,
       };
     });
   }

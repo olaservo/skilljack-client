@@ -108,6 +108,18 @@ export interface ContentAnnotations {
   lastModified?: string;
 }
 
+/**
+ * Content item with optional annotations.
+ * Used for tool result content that may have audience/priority hints.
+ */
+export interface AnnotatedContentItem {
+  type: 'text' | 'image' | 'resource';
+  text?: string;
+  data?: string;
+  mimeType?: string;
+  annotations?: ContentAnnotations;
+}
+
 export interface ToolWithUIInfo {
   /** Qualified name for API calls (server__tool) */
   name: string;

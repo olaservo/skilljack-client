@@ -10,6 +10,8 @@ import { useState } from 'react';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import type { ChatToolCall } from '../types';
 import { useToolExecution } from '../hooks';
+import { isForUser } from '../../../shared/content-annotations.js';
+import type { AnnotatedContentItem } from '../../../shared/types.js';
 
 interface ToolCallBlockProps {
   toolCall: ChatToolCall;
@@ -88,6 +90,52 @@ const statusLabels: Record<ChatToolCall['status'], string> = {
   failed: 'Failed',
 };
 
+/**
+ * Filter tool result content by audience for UI display.
+ * Only shows content intended for the user.
+ */
+function filterContentForUser(content: unknown): unknown {
+  // If not an array, return as-is (no annotations to filter)
+  if (!Array.isArray(content)) {
+    return content;
+  }
+
+  // Filter array items by audience
+  const filtered = content.filter((item) => {
+    // If item doesn't have annotations structure, include it (default: both audiences)
+    if (typeof item !== 'object' || item === null) {
+      return true;
+    }
+    const annotatedItem = item as AnnotatedContentItem;
+    return isForUser(annotatedItem.annotations);
+  });
+
+  return filtered;
+}
+
+/**
+ * Format filtered content for display.
+ */
+function formatContentForDisplay(content: unknown): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (Array.isArray(content)) {
+    // Extract text from content items
+    const texts = content
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (typeof item === 'object' && item !== null && 'text' in item) {
+          return (item as { text: string }).text;
+        }
+        return JSON.stringify(item, null, 2);
+      })
+      .filter(Boolean);
+    return texts.join('\n');
+  }
+  return JSON.stringify(content, null, 2);
+}
+
 export function ToolCallBlock({ toolCall, messageId }: ToolCallBlockProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { executeTool } = useToolExecution();
@@ -147,20 +195,22 @@ export function ToolCallBlock({ toolCall, messageId }: ToolCallBlockProps) {
           </div>
         )}
 
-        {toolCall.result !== undefined && (
-          <div className="tool-call-section">
-            <div className="tool-call-section-label">
-              {toolCall.result.isError ? 'Error:' : 'Result:'}
+        {toolCall.result !== undefined && (() => {
+          const filteredContent = filterContentForUser(toolCall.result.content);
+          const displayText = formatContentForDisplay(filteredContent);
+          // Don't show empty result section if all content was filtered out
+          if (!displayText) return null;
+          return (
+            <div className="tool-call-section">
+              <div className="tool-call-section-label">
+                {toolCall.result.isError ? 'Error:' : 'Result:'}
+              </div>
+              <pre className={toolCall.result.isError ? 'tool-call-error' : ''}>
+                {displayText}
+              </pre>
             </div>
-            <pre
-              className={toolCall.result.isError ? 'tool-call-error' : ''}
-            >
-              {typeof toolCall.result.content === 'string'
-                ? toolCall.result.content
-                : JSON.stringify(toolCall.result.content, null, 2)}
-            </pre>
-          </div>
-        )}
+          );
+        })()}
       </Collapsible.Content>
     </Collapsible.Root>
   );
