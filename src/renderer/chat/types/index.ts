@@ -70,6 +70,7 @@ export type AgentBlock =
 
 export interface AgentTextBlock {
   type: 'text';
+  id: string;
   content: string;
 }
 
@@ -87,11 +88,13 @@ export interface AgentToolBlock {
 
 export interface AgentThinkingBlock {
   type: 'thinking';
+  id: string;
   content: string;
 }
 
 export interface AgentStatusBlock {
   type: 'status';
+  id: string;
   message: string;
 }
 

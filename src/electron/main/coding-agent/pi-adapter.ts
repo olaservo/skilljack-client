@@ -17,6 +17,23 @@ import type {
   ExtensionUIResponse,
 } from './adapter.js';
 
+/** Maximum task length in characters (100KB) */
+const MAX_TASK_LENGTH = 100_000;
+
+/** Allowlist of environment variable names the renderer may set */
+const ALLOWED_ENV_KEYS = new Set([
+  'ANTHROPIC_API_KEY',
+  'OPENAI_API_KEY',
+  'GOOGLE_API_KEY',
+  'MISTRAL_API_KEY',
+  'GROQ_API_KEY',
+  'OPENROUTER_API_KEY',
+  'TOGETHER_API_KEY',
+  'FIREWORKS_API_KEY',
+  'DEEPSEEK_API_KEY',
+  'XAI_API_KEY',
+]);
+
 export function createPiAdapter(): CodingAgentAdapter {
   let proc: ChildProcess | null = null;
   let rl: readline.Interface | null = null;
@@ -35,9 +52,21 @@ export function createPiAdapter(): CodingAgentAdapter {
       if (config.model) args.push('--model', config.model);
       if (config.args) args.push(...config.args);
 
-      proc = spawn('node', [cliPath, ...args], {
+      // Filter env vars through allowlist to prevent the renderer from
+      // overriding sensitive variables like PATH or LD_PRELOAD.
+      const safeEnv: Record<string, string> = {};
+      if (config.env) {
+        for (const [key, val] of Object.entries(config.env)) {
+          if (ALLOWED_ENV_KEYS.has(key)) {
+            safeEnv[key] = val;
+          }
+        }
+      }
+
+      // Spawn pi directly (it may be a native binary or a Node shim on PATH)
+      proc = spawn(cliPath, args, {
         cwd: config.cwd,
-        env: { ...globalThis.process.env, ...config.env },
+        env: { ...globalThis.process.env, ...safeEnv },
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -52,28 +81,48 @@ export function createPiAdapter(): CodingAgentAdapter {
         }
       });
 
-      // Wait for process to be ready (or fail immediately)
+      // Wait for the first stdout line (pi ready signal) or process failure,
+      // with a generous fallback timeout instead of an arbitrary 500ms delay.
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => resolve(), 500);
-        proc!.on('error', (err) => {
-          clearTimeout(timeout);
+        const onReady = () => {
+          cleanup();
+          resolve();
+        };
+        const onError = (err: Error) => {
+          cleanup();
           reject(new Error(`Failed to start pi: ${err.message}`));
-        });
-        proc!.on('exit', (code) => {
+        };
+        const onExit = (code: number | null) => {
           if (code !== null && code !== 0) {
-            clearTimeout(timeout);
+            cleanup();
             reject(
               new Error(
                 `Pi process exited with code ${code}${stderrBuf ? `: ${stderrBuf.slice(0, 500)}` : ''}`
               )
             );
           }
-        });
+        };
+        const cleanup = () => {
+          clearTimeout(timeout);
+          rl!.off('line', onReady);
+          proc!.off('error', onError);
+          proc!.off('exit', onExit);
+        };
+        // Generous fallback — if pi emits no stdout at all, eventually continue
+        const timeout = setTimeout(onReady, 5000);
+        rl!.once('line', onReady);
+        proc!.on('error', onError);
+        proc!.on('exit', onExit);
       });
     },
 
     async *execute(task: string): AsyncIterable<AgentEvent> {
       if (!proc?.stdin || !rl) throw new Error('Pi process not started');
+
+      if (task.length > MAX_TASK_LENGTH) {
+        throw new Error(`Task too long (${task.length} chars, max ${MAX_TASK_LENGTH})`);
+      }
+
       running = true;
 
       // Event queue with async signaling

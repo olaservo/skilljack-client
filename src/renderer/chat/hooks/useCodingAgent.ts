@@ -27,18 +27,6 @@ export function useCodingAgent() {
   const steerRef = useRef<((msg: string) => void) | null>(null);
   const startedRef = useRef(false);
 
-  // Wire up IPC event listener — subscribe when an agent run is active
-  useEffect(() => {
-    const api = window.electronAPI;
-    if (!api?.codingAgent || !state.agentRun) return;
-
-    const messageId = state.agentRun.messageId;
-    const unsub = api.codingAgent.onEvent((event) => {
-      handleAgentEvent(dispatch, messageId, event as AgentEvent);
-    });
-    return unsub;
-  }, [dispatch, state.agentRun]);
-
   const startRun = useCallback(
     async (task: string, messageId: string) => {
       const api = window.electronAPI;
@@ -55,6 +43,12 @@ export function useCodingAgent() {
       abortRef.current = () => api.codingAgent.abort();
       steerRef.current = (msg) => api.codingAgent.steer(msg);
 
+      // Subscribe to events BEFORE calling execute() to avoid race condition
+      // where early events could be missed if the listener isn't set up yet.
+      const unsub = api.codingAgent.onEvent((event) => {
+        handleAgentEvent(dispatch, messageId, event as AgentEvent);
+      });
+
       try {
         // Start the pi subprocess — cwd defaults to main process cwd
         await api.codingAgent.start({});
@@ -65,6 +59,7 @@ export function useCodingAgent() {
         const msg = err instanceof Error ? err.message : 'Unknown error';
         dispatch({ type: 'AGENT_RUN_ERROR', messageId, error: msg });
       } finally {
+        unsub();
         abortRef.current = null;
         steerRef.current = null;
       }
@@ -96,7 +91,7 @@ export function useCodingAgent() {
 
 /**
  * Handles a single agent event by dispatching the appropriate reducer action.
- * Called from the IPC event listener setup in the preload/main bridge.
+ * Called from the IPC event listener setup in startRun.
  */
 export function handleAgentEvent(
   dispatch: Dispatch<ChatAction>,
@@ -193,10 +188,19 @@ export function handleAgentEvent(
       console.log('[CodingAgent] set_widget:', event.widgetKey);
       break;
 
-    case 'ui_request':
-      // TODO: Handle extension UI requests (select, confirm, input, editor)
-      // For now, log them
-      console.log('[CodingAgent] UI request:', event);
+    case 'ui_request': {
+      // Auto-cancel unhandled UI requests so pi doesn't block indefinitely.
+      // TODO: Implement proper UI for select, confirm, input, editor requests.
+      const api = window.electronAPI;
+      if (api?.codingAgent && event.id) {
+        api.codingAgent.respondToUIRequest({
+          type: 'extension_ui_response',
+          id: event.id as string,
+          cancelled: true,
+        });
+      }
+      console.warn('[CodingAgent] Auto-cancelled unhandled UI request:', event.method);
       break;
+    }
   }
 }

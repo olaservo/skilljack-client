@@ -77,8 +77,11 @@ export function AgentRunBlock({ message, onSteer, onAbort }: AgentRunBlockProps)
 
       {/* Interleaved blocks */}
       <div className="agent-run-blocks">
-        {message.blocks.map((block, i) => (
-          <AgentBlockRenderer key={i} block={block} />
+        {message.blocks.map((block) => (
+          <AgentBlockRenderer
+            key={block.type === 'tool' ? block.toolCallId : block.id}
+            block={block}
+          />
         ))}
       </div>
 

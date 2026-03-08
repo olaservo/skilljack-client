@@ -116,15 +116,22 @@ app.on('window-all-closed', () => {
   }
 });
 
-// Clean up before quit
-app.on('before-quit', async () => {
+// Clean up before quit — use preventDefault to ensure async cleanup completes
+app.on('before-quit', (e) => {
+  e.preventDefault();
   log.info('Application quitting, cleaning up...');
   cleanupIPCHandlers();
-  await shutdownCodingAgent();
-  if (serverManager) {
-    await serverManager.shutdown();
-    serverManager = null;
-  }
+  Promise.all([
+    shutdownCodingAgent(),
+    serverManager ? serverManager.shutdown() : Promise.resolve(),
+  ])
+    .catch((err) => log.error('Cleanup error:', err))
+    .finally(() => {
+      serverManager = null;
+      // Remove this handler to avoid infinite loop, then quit
+      app.removeAllListeners('before-quit');
+      app.quit();
+    });
 });
 
 // Handle uncaught exceptions

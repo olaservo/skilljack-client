@@ -18,6 +18,8 @@ import {
   AGENT_EVENT,
 } from '../../../shared/channels.js';
 
+// NOTE: Module-level singleton — assumes a single BrowserWindow.
+// If multi-window support is added, this should become a Map<BrowserWindow, CodingAgentAdapter>.
 let adapter: CodingAgentAdapter | null = null;
 
 export function registerCodingAgentHandlers(win: BrowserWindow): void {

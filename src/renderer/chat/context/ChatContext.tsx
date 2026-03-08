@@ -288,7 +288,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         if (last?.type === 'text') {
           return [...blocks.slice(0, -1), { ...last, content: last.content + action.delta }];
         }
-        return [...blocks, { type: 'text', content: action.delta }];
+        return [...blocks, { type: 'text', id: generateId(), content: action.delta }];
       });
 
     case 'AGENT_BLOCK_THINKING_DELTA':
@@ -297,7 +297,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         if (last?.type === 'thinking') {
           return [...blocks.slice(0, -1), { ...last, content: last.content + action.delta }];
         }
-        return [...blocks, { type: 'thinking', content: action.delta }];
+        return [...blocks, { type: 'thinking', id: generateId(), content: action.delta }];
       });
 
     case 'AGENT_BLOCK_TOOL_START':
@@ -328,7 +328,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'AGENT_BLOCK_STATUS':
       return updateAgentBlocks(state, action.messageId, (blocks) => [
         ...blocks,
-        { type: 'status', message: action.message },
+        { type: 'status', id: generateId(), message: action.message },
       ]);
 
     case 'AGENT_SET_STATUS':
