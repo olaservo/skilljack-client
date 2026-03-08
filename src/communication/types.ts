@@ -159,6 +159,17 @@ export interface ElectronAPI {
   minimizeWindow(): void;
   maximizeWindow(): void;
   closeWindow(): void;
+
+  // Coding Agent
+  codingAgent: {
+    start(config: { cwd: string; provider?: string; model?: string; cliPath?: string; env?: Record<string, string> }): Promise<void>;
+    execute(task: string): Promise<void>;
+    steer(message: string): Promise<void>;
+    abort(): Promise<void>;
+    stop(): Promise<void>;
+    respondToUIRequest(response: { type: string; id: string; [key: string]: unknown }): Promise<void>;
+    onEvent(callback: (event: Record<string, unknown>) => void): () => void;
+  };
 }
 
 // Extend Window interface for TypeScript

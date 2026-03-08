@@ -11,6 +11,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { useChat } from '../context/ChatContext';
+import { useCodingAgent } from '../hooks/useCodingAgent';
 import { ChatOutput } from './ChatOutput';
 import { ChatInput } from './ChatInput';
 import { ServerStatus } from './ServerStatus';
@@ -34,6 +35,7 @@ interface ChatDrawerProps {
 
 export function ChatDrawer({ alwaysOpen = false }: ChatDrawerProps) {
   const { state, toggleDrawer, closeDrawer } = useChat();
+  const { steer: agentSteer, abort: agentAbort } = useCodingAgent();
   const [height, setHeight] = useState(() => Math.round(window.innerHeight * 0.6));
   const drawerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -129,7 +131,12 @@ export function ChatDrawer({ alwaysOpen = false }: ChatDrawerProps) {
         </div>
 
         {/* Content */}
-        <ChatOutput messages={state.messages} isProcessing={state.isProcessing} />
+        <ChatOutput
+          messages={state.messages}
+          isProcessing={state.isProcessing}
+          onAgentSteer={state.agentRun ? agentSteer : undefined}
+          onAgentAbort={state.agentRun ? agentAbort : undefined}
+        />
         <ChatInput />
 
         {/* Tool execution handler (renders nothing) */}

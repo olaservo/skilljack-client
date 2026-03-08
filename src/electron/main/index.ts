@@ -13,6 +13,7 @@ import * as path from 'node:path';
 import log from 'electron-log';
 import { setupIPCHandlers, cleanupIPCHandlers } from './ipc-handlers.js';
 import { McpManager } from './mcp-manager.js';
+import { registerCodingAgentHandlers, shutdownCodingAgent } from './coding-agent/index.js';
 
 // Configure logging
 log.transports.file.level = 'info';
@@ -54,6 +55,9 @@ const createWindow = async (): Promise<void> => {
 
   // Setup IPC handlers with server manager
   setupIPCHandlers(mainWindow, serverManager);
+
+  // Setup coding agent IPC handlers
+  registerCodingAgentHandlers(mainWindow);
 
   // Load the app
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -116,6 +120,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', async () => {
   log.info('Application quitting, cleaning up...');
   cleanupIPCHandlers();
+  await shutdownCodingAgent();
   if (serverManager) {
     await serverManager.shutdown();
     serverManager = null;

@@ -157,6 +157,31 @@ export const CONFIRM_MCPB_INSTALL = 'mcpb:confirm-install';
 export const BROWSE_PATH = 'mcpb:browse-path';
 
 // ============================================
+// Coding Agent Channels
+// ============================================
+
+/** Start the coding agent process */
+export const AGENT_START = 'agent:start';
+
+/** Execute a coding task */
+export const AGENT_EXECUTE = 'agent:execute';
+
+/** Steer the agent mid-run */
+export const AGENT_STEER = 'agent:steer';
+
+/** Abort the current agent task */
+export const AGENT_ABORT = 'agent:abort';
+
+/** Stop the agent process entirely */
+export const AGENT_STOP = 'agent:stop';
+
+/** Respond to an extension UI request from the agent */
+export const AGENT_UI_RESPONSE = 'agent:ui-response';
+
+/** Streaming agent events (main → renderer) */
+export const AGENT_EVENT = 'agent:event';
+
+// ============================================
 // Settings Channels
 // ============================================
 
@@ -218,6 +243,13 @@ export const INVOKE_CHANNELS = [
   GET_MCPB_PREVIEW_DATA,
   CONFIRM_MCPB_INSTALL,
   BROWSE_PATH,
+  // Coding agent
+  AGENT_START,
+  AGENT_EXECUTE,
+  AGENT_STEER,
+  AGENT_ABORT,
+  AGENT_STOP,
+  AGENT_UI_RESPONSE,
 ] as const;
 
 /** Channels that renderer can listen to (main → renderer events) */
@@ -234,6 +266,8 @@ export const ON_CHANNELS = [
   ON_SERVER_CRASHED,
   ON_SERVER_RESTARTING,
   ON_MANAGER_READY,
+  // Coding agent events
+  AGENT_EVENT,
 ] as const;
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number];

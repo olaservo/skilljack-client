@@ -3,18 +3,23 @@
  *
  * Scrollable area that displays chat messages.
  * Auto-scrolls to bottom on new messages.
+ * Routes messages to appropriate renderers based on type.
  */
 
 import { useRef, useEffect } from 'react';
 import type { ChatMessage } from '../types';
+import { isTextMessage } from '../types';
 import { MessageBubble } from './MessageBubble';
+import { AgentRunBlock } from './AgentRunBlock';
 
 interface ChatOutputProps {
   messages: ChatMessage[];
   isProcessing: boolean;
+  onAgentSteer?: (message: string) => void;
+  onAgentAbort?: () => void;
 }
 
-export function ChatOutput({ messages, isProcessing }: ChatOutputProps) {
+export function ChatOutput({ messages, isProcessing, onAgentSteer, onAgentAbort }: ChatOutputProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldScrollRef = useRef(true);
 
@@ -50,12 +55,22 @@ export function ChatOutput({ messages, isProcessing }: ChatOutputProps) {
           </p>
         </div>
       ) : (
-        messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
-        ))
+        messages.map((message) => {
+          if (isTextMessage(message)) {
+            return <MessageBubble key={message.id} message={message} />;
+          }
+          return (
+            <AgentRunBlock
+              key={message.id}
+              message={message}
+              onSteer={message.status === 'running' ? onAgentSteer : undefined}
+              onAbort={message.status === 'running' ? onAgentAbort : undefined}
+            />
+          );
+        })
       )}
 
-      {isProcessing && !messages.some((m) => m.isStreaming) && (
+      {isProcessing && !messages.some((m) => isTextMessage(m) && m.isStreaming) && (
         <div className="chat-typing">
           <span className="chat-typing-dot" />
           <span className="chat-typing-dot" />

@@ -387,6 +387,53 @@ const electronAPI = {
       ipcRenderer.removeListener(channels.ON_MANAGER_READY, handler);
     };
   },
+
+  // ============================================
+  // Coding Agent
+  // ============================================
+
+  codingAgent: {
+    start: (config: { cwd: string; provider?: string; model?: string; cliPath?: string; env?: Record<string, string> }) => {
+      validateInvokeChannel(channels.AGENT_START);
+      return ipcRenderer.invoke(channels.AGENT_START, config);
+    },
+
+    execute: (task: string) => {
+      validateInvokeChannel(channels.AGENT_EXECUTE);
+      return ipcRenderer.invoke(channels.AGENT_EXECUTE, task);
+    },
+
+    steer: (message: string) => {
+      validateInvokeChannel(channels.AGENT_STEER);
+      return ipcRenderer.invoke(channels.AGENT_STEER, message);
+    },
+
+    abort: () => {
+      validateInvokeChannel(channels.AGENT_ABORT);
+      return ipcRenderer.invoke(channels.AGENT_ABORT);
+    },
+
+    stop: () => {
+      validateInvokeChannel(channels.AGENT_STOP);
+      return ipcRenderer.invoke(channels.AGENT_STOP);
+    },
+
+    respondToUIRequest: (response: { type: string; id: string; [key: string]: unknown }) => {
+      validateInvokeChannel(channels.AGENT_UI_RESPONSE);
+      return ipcRenderer.invoke(channels.AGENT_UI_RESPONSE, response);
+    },
+
+    onEvent: (callback: (event: Record<string, unknown>) => void): (() => void) => {
+      validateOnChannel(channels.AGENT_EVENT);
+      const handler = (_event: Electron.IpcRendererEvent, data: Record<string, unknown>) => {
+        callback(data);
+      };
+      ipcRenderer.on(channels.AGENT_EVENT, handler);
+      return () => {
+        ipcRenderer.removeListener(channels.AGENT_EVENT, handler);
+      };
+    },
+  },
 };
 
 // ============================================

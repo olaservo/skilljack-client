@@ -4,11 +4,11 @@
  * Renders a single chat message with optional tool calls.
  */
 
-import type { ChatMessage } from '../types';
+import type { ChatTextMessage } from '../types';
 import { ToolCallBlock } from './ToolCallBlock';
 
 interface MessageBubbleProps {
-  message: ChatMessage;
+  message: ChatTextMessage;
 }
 
 export function MessageBubble({ message }: MessageBubbleProps) {

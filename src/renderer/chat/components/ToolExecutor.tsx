@@ -9,6 +9,7 @@
 import { useEffect, useRef } from 'react';
 import { useChat } from '../context/ChatContext';
 import { useToolExecution } from '../hooks';
+import { isTextMessage } from '../types';
 
 export function ToolExecutor() {
   const { state } = useChat();
@@ -16,8 +17,11 @@ export function ToolExecutor() {
   const executingRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    // Find messages that have finished streaming and have pending tool calls
+    // Find text messages that have finished streaming and have pending tool calls
     for (const message of state.messages) {
+      // Skip agent-run messages — they handle their own tools
+      if (!isTextMessage(message)) continue;
+
       // Skip if still streaming
       if (message.isStreaming) continue;
 

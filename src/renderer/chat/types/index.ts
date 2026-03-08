@@ -18,7 +18,12 @@ export interface MessageModelConfig {
   maxTurns: number;
 }
 
-export interface ChatMessage {
+/**
+ * Standard chat message (user, assistant, or system).
+ * Part of the ChatMessage discriminated union.
+ */
+export interface ChatTextMessage {
+  type: 'text';
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -28,6 +33,90 @@ export interface ChatMessage {
   error?: string;
   /** Model config for assistant messages - used for multi-turn continuation */
   modelConfig?: MessageModelConfig;
+}
+
+// ============================================
+// Agent Run Types
+// ============================================
+
+/** A complete or in-progress coding agent run, displayed as a single chat message */
+export interface AgentRunMessage {
+  type: 'agent-run';
+  id: string;
+  timestamp: string;
+  task: string;
+  status: 'running' | 'completed' | 'aborted' | 'error';
+  error?: string;
+  blocks: AgentBlock[];
+  title?: string;
+  statuses: Record<string, string>;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalCost: number;
+  };
+  model?: {
+    provider: string;
+    id: string;
+  };
+}
+
+/** A single block of agent output */
+export type AgentBlock =
+  | AgentTextBlock
+  | AgentToolBlock
+  | AgentThinkingBlock
+  | AgentStatusBlock;
+
+export interface AgentTextBlock {
+  type: 'text';
+  content: string;
+}
+
+export interface AgentToolBlock {
+  type: 'tool';
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+  status: 'running' | 'completed' | 'error';
+  result?: {
+    content: unknown;
+    isError: boolean;
+  };
+}
+
+export interface AgentThinkingBlock {
+  type: 'thinking';
+  content: string;
+}
+
+export interface AgentStatusBlock {
+  type: 'status';
+  message: string;
+}
+
+/** Top-level state for the active agent run (null when no agent is running) */
+export interface AgentRunState {
+  messageId: string;
+  task: string;
+  canSteer: boolean;
+  canAbort: boolean;
+}
+
+/**
+ * Discriminated union of all chat message types.
+ * Use `message.type` to narrow: 'text' for standard messages, 'agent-run' for agent runs.
+ */
+export type ChatMessage = ChatTextMessage | AgentRunMessage;
+
+/** Type guard: is this a standard text message? */
+export function isTextMessage(msg: ChatMessage): msg is ChatTextMessage {
+  return msg.type === 'text';
+}
+
+/** Type guard: is this an agent run message? */
+export function isAgentRunMessage(msg: ChatMessage): msg is AgentRunMessage {
+  return msg.type === 'agent-run';
 }
 
 export interface ChatToolCall {
@@ -126,6 +215,8 @@ export interface ChatState {
   error: string | null;
   /** Current turn in multi-turn tool workflow (0 = first turn) */
   currentTurn: number;
+  /** Active coding agent run. Null when no agent is running. */
+  agentRun: AgentRunState | null;
 }
 
 export type ChatAction =
@@ -136,7 +227,7 @@ export type ChatAction =
   | { type: 'ADD_TO_HISTORY'; value: string }
   | { type: 'NAVIGATE_HISTORY'; direction: 'up' | 'down' }
   | { type: 'ADD_MESSAGE'; message: ChatMessage }
-  | { type: 'UPDATE_MESSAGE'; id: string; updates: Partial<ChatMessage> }
+  | { type: 'UPDATE_MESSAGE'; id: string; updates: Partial<ChatTextMessage> }
   | { type: 'APPEND_STREAM'; id: string; content: string }
   | { type: 'APPEND_TOOL_CALLS'; messageId: string; toolCalls: ChatToolCall[] }
   | { type: 'UPDATE_TOOL_CALL'; messageId: string; toolCallId: string; updates: Partial<ChatToolCall> }
@@ -150,7 +241,21 @@ export type ChatAction =
   | { type: 'CLEAR_MESSAGES' }
   | { type: 'NEW_SESSION' }
   | { type: 'INCREMENT_TURN' }
-  | { type: 'RESET_TURN' };
+  | { type: 'RESET_TURN' }
+  // --- Agent Run Lifecycle ---
+  | { type: 'AGENT_RUN_START'; task: string; messageId: string; model?: { provider: string; id: string } }
+  | { type: 'AGENT_RUN_COMPLETE'; messageId: string; usage?: AgentRunMessage['usage'] }
+  | { type: 'AGENT_RUN_ERROR'; messageId: string; error: string }
+  | { type: 'AGENT_RUN_ABORT'; messageId: string }
+  // --- Agent Run Content ---
+  | { type: 'AGENT_BLOCK_TEXT_DELTA'; messageId: string; delta: string }
+  | { type: 'AGENT_BLOCK_THINKING_DELTA'; messageId: string; delta: string }
+  | { type: 'AGENT_BLOCK_TOOL_START'; messageId: string; toolCallId: string; toolName: string; args: Record<string, unknown> }
+  | { type: 'AGENT_BLOCK_TOOL_END'; messageId: string; toolCallId: string; result: unknown; isError: boolean }
+  | { type: 'AGENT_BLOCK_STATUS'; messageId: string; message: string }
+  // --- Agent Run Metadata ---
+  | { type: 'AGENT_SET_STATUS'; messageId: string; statusKey: string; statusText: string | undefined }
+  | { type: 'AGENT_SET_TITLE'; messageId: string; title: string };
 
 // ============================================
 // Theme Types

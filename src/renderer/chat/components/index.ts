@@ -12,3 +12,4 @@ export { ToolCallBlock } from './ToolCallBlock';
 export { ServerStatus } from './ServerStatus';
 export { ThemeToggle } from './ThemeToggle';
 export { ToolExecutor } from './ToolExecutor';
+export { AgentRunBlock } from './AgentRunBlock';

@@ -22,11 +22,15 @@ import type {
   ChatState,
   ChatAction,
   ChatMessage,
+  ChatTextMessage,
   ChatToolCall,
   ServerInfo,
   McpTool,
   MessageModelConfig,
+  AgentRunMessage,
+  AgentBlock,
 } from '../types';
+import { isTextMessage } from '../types';
 import { useSettings } from '../../settings';
 import { useCommunication } from '../../hooks/useCommunication';
 import type { StreamEvent } from '../../../shared/types';
@@ -57,6 +61,7 @@ const initialState: ChatState = {
   activeServers: null,
   error: null,
   currentTurn: 0,
+  agentRun: null,
 };
 
 // ============================================
@@ -134,7 +139,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         messages: state.messages.map((msg) =>
-          msg.id === action.id
+          msg.id === action.id && isTextMessage(msg)
             ? { ...msg, content: msg.content + action.content }
             : msg
         ),
@@ -144,7 +149,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         messages: state.messages.map((msg) => {
-          if (msg.id !== action.messageId || !msg.toolCalls) return msg;
+          if (msg.id !== action.messageId || !isTextMessage(msg) || !msg.toolCalls) return msg;
           return {
             ...msg,
             toolCalls: msg.toolCalls.map((tc) =>
@@ -204,7 +209,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return {
         ...state,
         messages: state.messages.map((msg) => {
-          if (msg.id !== action.messageId) return msg;
+          if (msg.id !== action.messageId || !isTextMessage(msg)) return msg;
           const existingToolCalls = msg.toolCalls || [];
           return {
             ...msg,
@@ -213,9 +218,163 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         }),
       };
 
+    // ============================================
+    // Agent Run Actions
+    // ============================================
+
+    case 'AGENT_RUN_START': {
+      const agentMsg: AgentRunMessage = {
+        type: 'agent-run',
+        id: action.messageId,
+        timestamp: new Date().toISOString(),
+        task: action.task,
+        status: 'running',
+        blocks: [],
+        statuses: {},
+        model: action.model,
+      };
+      return {
+        ...state,
+        messages: [...state.messages, agentMsg],
+        isProcessing: true,
+        agentRun: {
+          messageId: action.messageId,
+          task: action.task,
+          canSteer: true,
+          canAbort: true,
+        },
+      };
+    }
+
+    case 'AGENT_RUN_COMPLETE':
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.id === action.messageId && m.type === 'agent-run'
+            ? { ...m, status: 'completed' as const, usage: action.usage }
+            : m
+        ),
+        isProcessing: false,
+        agentRun: null,
+      };
+
+    case 'AGENT_RUN_ERROR':
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.id === action.messageId && m.type === 'agent-run'
+            ? { ...m, status: 'error' as const, error: action.error }
+            : m
+        ),
+        isProcessing: false,
+        agentRun: null,
+      };
+
+    case 'AGENT_RUN_ABORT':
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.id === action.messageId && m.type === 'agent-run'
+            ? { ...m, status: 'aborted' as const }
+            : m
+        ),
+        isProcessing: false,
+        agentRun: null,
+      };
+
+    case 'AGENT_BLOCK_TEXT_DELTA':
+      return updateAgentBlocks(state, action.messageId, (blocks) => {
+        const last = blocks[blocks.length - 1];
+        if (last?.type === 'text') {
+          return [...blocks.slice(0, -1), { ...last, content: last.content + action.delta }];
+        }
+        return [...blocks, { type: 'text', content: action.delta }];
+      });
+
+    case 'AGENT_BLOCK_THINKING_DELTA':
+      return updateAgentBlocks(state, action.messageId, (blocks) => {
+        const last = blocks[blocks.length - 1];
+        if (last?.type === 'thinking') {
+          return [...blocks.slice(0, -1), { ...last, content: last.content + action.delta }];
+        }
+        return [...blocks, { type: 'thinking', content: action.delta }];
+      });
+
+    case 'AGENT_BLOCK_TOOL_START':
+      return updateAgentBlocks(state, action.messageId, (blocks) => [
+        ...blocks,
+        {
+          type: 'tool',
+          toolCallId: action.toolCallId,
+          toolName: action.toolName,
+          args: action.args,
+          status: 'running' as const,
+        },
+      ]);
+
+    case 'AGENT_BLOCK_TOOL_END':
+      return updateAgentBlocks(state, action.messageId, (blocks) =>
+        blocks.map((b) =>
+          b.type === 'tool' && b.toolCallId === action.toolCallId
+            ? {
+                ...b,
+                status: (action.isError ? 'error' : 'completed') as const,
+                result: { content: action.result, isError: action.isError },
+              }
+            : b
+        )
+      );
+
+    case 'AGENT_BLOCK_STATUS':
+      return updateAgentBlocks(state, action.messageId, (blocks) => [
+        ...blocks,
+        { type: 'status', message: action.message },
+      ]);
+
+    case 'AGENT_SET_STATUS':
+      return {
+        ...state,
+        messages: state.messages.map((m) => {
+          if (m.id !== action.messageId || m.type !== 'agent-run') return m;
+          const statuses = { ...m.statuses };
+          if (action.statusText === undefined) {
+            delete statuses[action.statusKey];
+          } else {
+            statuses[action.statusKey] = action.statusText;
+          }
+          return { ...m, statuses };
+        }),
+      };
+
+    case 'AGENT_SET_TITLE':
+      return {
+        ...state,
+        messages: state.messages.map((m) =>
+          m.id === action.messageId && m.type === 'agent-run'
+            ? { ...m, title: action.title }
+            : m
+        ),
+      };
+
     default:
       return state;
   }
+}
+
+/** Helper: update the blocks array of an AgentRunMessage */
+function updateAgentBlocks(
+  state: ChatState,
+  messageId: string,
+  updater: (blocks: AgentBlock[]) => AgentBlock[]
+): ChatState {
+  return {
+    ...state,
+    messages: state.messages.map((m) =>
+      m.id === messageId && m.type === 'agent-run'
+        ? { ...m, blocks: updater(m.blocks) }
+        : m
+    ),
+  };
 }
 
 // ============================================
@@ -231,8 +390,8 @@ interface ChatContextValue {
   closeDrawer: () => void;
   setInput: (value: string) => void;
   sendMessage: (content: string) => void;
-  addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => ChatMessage;
-  updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
+  addMessage: (message: Omit<ChatTextMessage, 'id' | 'timestamp'>) => ChatTextMessage;
+  updateMessage: (id: string, updates: Partial<ChatTextMessage>) => void;
   appendStream: (id: string, content: string) => void;
   updateToolCall: (messageId: string, toolCallId: string, updates: Partial<ChatToolCall>) => void;
   navigateHistory: (direction: 'up' | 'down') => void;
@@ -276,8 +435,8 @@ export function ChatProvider({ children }: ChatProviderProps) {
   }, []);
 
   const addMessage = useCallback(
-    (message: Omit<ChatMessage, 'id' | 'timestamp'>): ChatMessage => {
-      const fullMessage: ChatMessage = {
+    (message: Omit<ChatTextMessage, 'id' | 'timestamp'>): ChatTextMessage => {
+      const fullMessage: ChatTextMessage = {
         ...message,
         id: generateId(),
         timestamp: new Date().toISOString(),
@@ -289,7 +448,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
   );
 
   const updateMessage = useCallback(
-    (id: string, updates: Partial<ChatMessage>) => {
+    (id: string, updates: Partial<ChatTextMessage>) => {
       dispatch({ type: 'UPDATE_MESSAGE', id, updates });
     },
     []
@@ -317,12 +476,35 @@ export function ChatProvider({ children }: ChatProviderProps) {
       let modelRole: 'doer' | 'dreamer' = 'doer';
       let processedContent = content.trim();
 
+      // Check for /code command — hand off to coding agent
+      if (processedContent.startsWith('/code ')) {
+        const codeTask = processedContent.slice(6).trim();
+        if (codeTask) {
+          dispatch({ type: 'ADD_TO_HISTORY', value: content });
+          dispatch({ type: 'SET_INPUT', value: '' });
+          addMessage({ type: 'text', role: 'user', content });
+          // Agent run is started via useCodingAgent hook — dispatch the start action
+          const messageId = generateId();
+          dispatch({ type: 'AGENT_RUN_START', task: codeTask, messageId });
+          // The actual pi subprocess execution is handled by the useCodingAgent hook
+          // which listens for AGENT_RUN_START and drives the adapter
+          return;
+        }
+        addMessage({
+          type: 'text',
+          role: 'system',
+          content: 'Usage: `/code <task>` - Hand off a coding task to the autonomous coding agent.',
+        });
+        return;
+      }
+
       if (processedContent.startsWith('/dream ')) {
         modelRole = 'dreamer';
         processedContent = processedContent.slice(7).trim();
       } else if (processedContent === '/dream') {
         // Just "/dream" with no content - show help
         addMessage({
+          type: 'text',
           role: 'system',
           content: 'Usage: `/dream <your question>` - Use the Dreamer model for complex reasoning.',
         });
@@ -337,7 +519,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
       dispatch({ type: 'SET_INPUT', value: '' });
       dispatch({ type: 'RESET_TURN' }); // Reset turn counter for new user message
       continuationTriggeredRef.current.clear(); // Clear continuation tracking for new conversation turn
-      addMessage({ role: 'user', content });
+      addMessage({ type: 'text', role: 'user', content });
 
       // Create assistant message placeholder with model config for continuation
       const msgModelConfig: MessageModelConfig = {
@@ -347,6 +529,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
         maxTurns: modelConfig.maxTurns,
       };
       const assistantMsg = addMessage({
+        type: 'text',
         role: 'assistant',
         content: '',
         isStreaming: true,
@@ -364,6 +547,8 @@ export function ChatProvider({ children }: ChatProviderProps) {
         }> = [];
 
         for (const m of state.messages) {
+          // Skip agent-run messages — they are self-contained
+          if (!isTextMessage(m)) continue;
           if (m.role === 'system') continue;
 
           if (m.role === 'user') {
@@ -484,7 +669,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
     async (messageId: string) => {
       // Find the message we're continuing from
       const message = state.messages.find((m) => m.id === messageId);
-      if (!message || message.role !== 'assistant') {
+      if (!message || !isTextMessage(message) || message.role !== 'assistant') {
         console.warn('[Chat] continueAfterTools: Invalid message', messageId);
         return;
       }
@@ -532,6 +717,8 @@ export function ChatProvider({ children }: ChatProviderProps) {
         }> = [];
 
         for (const m of state.messages) {
+          // Skip agent-run messages — they are self-contained
+          if (!isTextMessage(m)) continue;
           if (m.role === 'system') continue;
 
           if (m.role === 'user') {
@@ -662,8 +849,10 @@ export function ChatProvider({ children }: ChatProviderProps) {
     // Skip if processing (already continuing or waiting for stream)
     if (state.isProcessing) return;
 
-    // Find the last assistant message
-    const lastAssistantMsg = [...state.messages].reverse().find((m) => m.role === 'assistant');
+    // Find the last assistant text message (skip agent-run messages)
+    const lastAssistantMsg = [...state.messages].reverse().find(
+      (m): m is ChatTextMessage => isTextMessage(m) && m.role === 'assistant'
+    );
     if (!lastAssistantMsg) return;
 
     // Skip if streaming
