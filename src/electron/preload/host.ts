@@ -393,7 +393,7 @@ const electronAPI = {
   // ============================================
 
   codingAgent: {
-    start: (config: { cwd: string; provider?: string; model?: string; cliPath?: string; env?: Record<string, string> }) => {
+    start: (config: { cwd?: string; provider?: string; model?: string; cliPath?: string; env?: Record<string, string> }) => {
       validateInvokeChannel(channels.AGENT_START);
       return ipcRenderer.invoke(channels.AGENT_START, config);
     },

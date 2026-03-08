@@ -3,9 +3,14 @@
  *
  * Bridges the coding agent adapter (IPC) to ChatContext dispatch.
  * Translates agent events into reducer actions.
+ *
+ * Responsibilities:
+ * 1. Subscribe to IPC agent events and dispatch them to the reducer
+ * 2. Auto-trigger startRun when state.agentRun appears
+ * 3. Expose steer/abort controls for the UI
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useChat } from '../context/ChatContext';
 import type { ChatAction } from '../types';
 import type { Dispatch } from 'react';
@@ -20,6 +25,19 @@ export function useCodingAgent() {
   const { dispatch, state } = useChat();
   const abortRef = useRef<(() => void) | null>(null);
   const steerRef = useRef<((msg: string) => void) | null>(null);
+  const startedRef = useRef(false);
+
+  // Wire up IPC event listener — subscribe when an agent run is active
+  useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.codingAgent || !state.agentRun) return;
+
+    const messageId = state.agentRun.messageId;
+    const unsub = api.codingAgent.onEvent((event) => {
+      handleAgentEvent(dispatch, messageId, event as AgentEvent);
+    });
+    return unsub;
+  }, [dispatch, state.agentRun]);
 
   const startRun = useCallback(
     async (task: string, messageId: string) => {
@@ -38,12 +56,10 @@ export function useCodingAgent() {
       steerRef.current = (msg) => api.codingAgent.steer(msg);
 
       try {
-        // Start the pi subprocess
-        await api.codingAgent.start({
-          cwd: process.cwd?.() ?? '.',
-        });
+        // Start the pi subprocess — cwd defaults to main process cwd
+        await api.codingAgent.start({});
 
-        // Execute the task — events stream via IPC
+        // Execute the task — events stream via IPC onEvent listener
         await api.codingAgent.execute(task);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'Unknown error';
@@ -56,6 +72,17 @@ export function useCodingAgent() {
     [dispatch]
   );
 
+  // Auto-trigger startRun when a new agent run appears in state
+  useEffect(() => {
+    if (state.agentRun && !startedRef.current) {
+      startedRef.current = true;
+      startRun(state.agentRun.task, state.agentRun.messageId);
+    }
+    if (!state.agentRun) {
+      startedRef.current = false;
+    }
+  }, [state.agentRun, startRun]);
+
   const steer = useCallback(async (message: string) => {
     await steerRef.current?.(message);
   }, []);
@@ -64,7 +91,7 @@ export function useCodingAgent() {
     await abortRef.current?.();
   }, []);
 
-  return { startRun, steer, abort };
+  return { steer, abort };
 }
 
 /**
@@ -152,6 +179,18 @@ export function handleAgentEvent(
         messageId,
         error: event.message as string,
       });
+      break;
+
+    case 'tool_update':
+      // Partial tool results (e.g. streaming bash output) — log for now
+      // TODO: Add AGENT_BLOCK_TOOL_UPDATE reducer action for live streaming
+      console.log('[CodingAgent] tool_update:', event.toolCallId);
+      break;
+
+    case 'set_widget':
+      // Widget updates from extensions — log for now
+      // TODO: Add AGENT_SET_WIDGET reducer action for widget display
+      console.log('[CodingAgent] set_widget:', event.widgetKey);
       break;
 
     case 'ui_request':

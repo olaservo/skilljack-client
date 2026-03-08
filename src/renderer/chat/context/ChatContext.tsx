@@ -483,11 +483,10 @@ export function ChatProvider({ children }: ChatProviderProps) {
           dispatch({ type: 'ADD_TO_HISTORY', value: content });
           dispatch({ type: 'SET_INPUT', value: '' });
           addMessage({ type: 'text', role: 'user', content });
-          // Agent run is started via useCodingAgent hook — dispatch the start action
+          // Dispatch AGENT_RUN_START — the useCodingAgent hook watches for
+          // state.agentRun and auto-triggers the pi subprocess + IPC event wiring
           const messageId = generateId();
           dispatch({ type: 'AGENT_RUN_START', task: codeTask, messageId });
-          // The actual pi subprocess execution is handled by the useCodingAgent hook
-          // which listens for AGENT_RUN_START and drives the adapter
           return;
         }
         addMessage({

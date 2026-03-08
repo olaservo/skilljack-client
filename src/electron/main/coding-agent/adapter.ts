@@ -13,8 +13,8 @@
 export interface CodingAgentConfig {
   /** Path to pi CLI. Default: 'pi' (searches PATH) */
   cliPath?: string;
-  /** Working directory for the agent */
-  cwd: string;
+  /** Working directory for the agent. Defaults to main process cwd. */
+  cwd?: string;
   /** LLM provider override (uses pi's default if omitted) */
   provider?: string;
   /** Model ID override (uses pi's default if omitted) */

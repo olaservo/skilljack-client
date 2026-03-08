@@ -162,7 +162,7 @@ export interface ElectronAPI {
 
   // Coding Agent
   codingAgent: {
-    start(config: { cwd: string; provider?: string; model?: string; cliPath?: string; env?: Record<string, string> }): Promise<void>;
+    start(config: { cwd?: string; provider?: string; model?: string; cliPath?: string; env?: Record<string, string> }): Promise<void>;
     execute(task: string): Promise<void>;
     steer(message: string): Promise<void>;
     abort(): Promise<void>;

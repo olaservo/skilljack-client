@@ -43,10 +43,13 @@ export function createPiAdapter(): CodingAgentAdapter {
 
       rl = readline.createInterface({ input: proc.stdout!, terminal: false });
 
-      // Collect stderr for diagnostics
+      // Collect stderr for diagnostics (capped at 4KB to prevent unbounded growth)
       let stderrBuf = '';
       proc.stderr?.on('data', (chunk: Buffer) => {
         stderrBuf += chunk.toString();
+        if (stderrBuf.length > 4096) {
+          stderrBuf = stderrBuf.slice(-4096);
+        }
       });
 
       // Wait for process to be ready (or fail immediately)
@@ -142,17 +145,20 @@ export function createPiAdapter(): CodingAgentAdapter {
 
     async stop() {
       if (proc) {
-        proc.kill('SIGTERM');
-        await new Promise<void>((res) => {
-          const timeout = setTimeout(() => {
-            proc?.kill('SIGKILL');
-            res();
-          }, 2000);
-          proc?.on('exit', () => {
-            clearTimeout(timeout);
-            res();
+        // Only attempt to kill if the process is still alive
+        if (proc.exitCode === null && !proc.killed) {
+          proc.kill('SIGTERM');
+          await new Promise<void>((res) => {
+            const timeout = setTimeout(() => {
+              proc?.kill('SIGKILL');
+              res();
+            }, 2000);
+            proc?.on('exit', () => {
+              clearTimeout(timeout);
+              res();
+            });
           });
-        });
+        }
         proc = null;
         rl = null;
         running = false;

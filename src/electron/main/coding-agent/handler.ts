@@ -27,7 +27,8 @@ export function registerCodingAgentHandlers(win: BrowserWindow): void {
       await adapter.stop();
     }
     adapter = createPiAdapter();
-    await adapter.start(config);
+    // Default cwd to main process working directory (renderer can't access process.cwd)
+    await adapter.start({ ...config, cwd: config.cwd || process.cwd() });
   });
 
   ipcMain.handle(AGENT_EXECUTE, async (_event, task: string) => {
