@@ -188,7 +188,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, error: action.error };
 
     case 'CLEAR_MESSAGES':
-      return { ...state, messages: [] };
+      return { ...state, messages: [], agentRun: null };
 
     case 'NEW_SESSION':
       return {
@@ -197,6 +197,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: [],
         error: null,
         currentTurn: 0,
+        agentRun: null,
       };
 
     case 'INCREMENT_TURN':

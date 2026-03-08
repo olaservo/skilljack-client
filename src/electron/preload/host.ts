@@ -418,7 +418,7 @@ const electronAPI = {
       return ipcRenderer.invoke(channels.AGENT_STOP);
     },
 
-    respondToUIRequest: (response: { type: string; id: string; [key: string]: unknown }) => {
+    respondToUIRequest: (response: { type: 'extension_ui_response'; id: string; [key: string]: unknown }) => {
       validateInvokeChannel(channels.AGENT_UI_RESPONSE);
       return ipcRenderer.invoke(channels.AGENT_UI_RESPONSE, response);
     },

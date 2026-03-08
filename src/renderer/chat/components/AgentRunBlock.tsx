@@ -8,6 +8,9 @@
 import { useState } from 'react';
 import type { AgentRunMessage, AgentBlock, AgentToolBlock as AgentToolBlockType } from '../types';
 
+/** Max characters to show for tool results before truncating */
+const MAX_RESULT_LENGTH = 5000;
+
 // ============================================
 // Known tool display metadata
 // ============================================
@@ -174,6 +177,28 @@ function AgentToolView({ block }: { block: AgentToolBlockType }) {
   );
 }
 
+/** Pre block that truncates long content with a toggle */
+function TruncatedPre({ content, className }: { content: string; className?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const truncated = content.length > MAX_RESULT_LENGTH;
+
+  return (
+    <>
+      <pre className={className}>
+        {truncated && !expanded ? content.slice(0, MAX_RESULT_LENGTH) + '\n... (truncated)' : content}
+      </pre>
+      {truncated && (
+        <button
+          className="agent-truncate-toggle"
+          onClick={() => setExpanded(!expanded)}
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </>
+  );
+}
+
 function AgentToolDetail({ block }: { block: AgentToolBlockType }) {
   switch (block.toolName) {
     case 'bash':
@@ -181,7 +206,7 @@ function AgentToolDetail({ block }: { block: AgentToolBlockType }) {
         <div className="agent-tool-bash">
           <div className="bash-command">$ {String(block.args.command ?? '')}</div>
           {block.result && (
-            <pre className="bash-output">{String(block.result.content ?? '')}</pre>
+            <TruncatedPre className="bash-output" content={String(block.result.content ?? '')} />
           )}
         </div>
       );
@@ -191,7 +216,7 @@ function AgentToolDetail({ block }: { block: AgentToolBlockType }) {
         <div className="agent-tool-edit">
           <div className="edit-path">{String(block.args.file_path ?? block.args.path ?? '')}</div>
           {block.result && (
-            <pre className="edit-result">{String(block.result.content ?? '')}</pre>
+            <TruncatedPre className="edit-result" content={String(block.result.content ?? '')} />
           )}
         </div>
       );
@@ -227,7 +252,7 @@ function AgentToolDetail({ block }: { block: AgentToolBlockType }) {
             <span className="grep-path">in {String(block.args.path)}</span>
           )}
           {block.result && (
-            <pre className="grep-result">{String(block.result.content ?? '')}</pre>
+            <TruncatedPre className="grep-result" content={String(block.result.content ?? '')} />
           )}
         </div>
       );
@@ -238,7 +263,7 @@ function AgentToolDetail({ block }: { block: AgentToolBlockType }) {
         <div className="agent-tool-generic">
           <pre className="tool-args">{JSON.stringify(block.args, null, 2)}</pre>
           {block.result && (
-            <pre className="tool-result">{String(block.result.content ?? '')}</pre>
+            <TruncatedPre className="tool-result" content={String(block.result.content ?? '')} />
           )}
         </div>
       );
@@ -250,11 +275,14 @@ function AgentToolDetail({ block }: { block: AgentToolBlockType }) {
           <div className="tool-name-label">{block.toolName}</div>
           <pre className="tool-args">{JSON.stringify(block.args, null, 2)}</pre>
           {block.result && (
-            <pre className="tool-result">
-              {typeof block.result.content === 'string'
-                ? block.result.content
-                : JSON.stringify(block.result.content, null, 2)}
-            </pre>
+            <TruncatedPre
+              className="tool-result"
+              content={
+                typeof block.result.content === 'string'
+                  ? block.result.content
+                  : JSON.stringify(block.result.content, null, 2)
+              }
+            />
           )}
         </div>
       );

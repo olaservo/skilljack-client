@@ -99,21 +99,29 @@ export function handleAgentEvent(
   event: AgentEvent
 ): void {
   switch (event.type) {
-    case 'text_delta':
-      dispatch({
-        type: 'AGENT_BLOCK_TEXT_DELTA',
-        messageId,
-        delta: event.delta as string,
-      });
+    case 'text_delta': {
+      const textDelta = typeof event.delta === 'string' ? event.delta : '';
+      if (textDelta) {
+        dispatch({
+          type: 'AGENT_BLOCK_TEXT_DELTA',
+          messageId,
+          delta: textDelta,
+        });
+      }
       break;
+    }
 
-    case 'thinking_delta':
-      dispatch({
-        type: 'AGENT_BLOCK_THINKING_DELTA',
-        messageId,
-        delta: event.delta as string,
-      });
+    case 'thinking_delta': {
+      const thinkingDelta = typeof event.delta === 'string' ? event.delta : '';
+      if (thinkingDelta) {
+        dispatch({
+          type: 'AGENT_BLOCK_THINKING_DELTA',
+          messageId,
+          delta: thinkingDelta,
+        });
+      }
       break;
+    }
 
     case 'tool_start':
       dispatch({

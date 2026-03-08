@@ -19,8 +19,6 @@ export interface CodingAgentConfig {
   provider?: string;
   /** Model ID override (uses pi's default if omitted) */
   model?: string;
-  /** Extra CLI args passed to pi */
-  args?: string[];
   /** Environment variables (e.g. API keys) */
   env?: Record<string, string>;
   /** Timeout in ms. Default: 300000 (5 min) */

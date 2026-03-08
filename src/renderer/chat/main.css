@@ -1236,3 +1236,307 @@
 .mcp-app-container[data-layout="tabs"] .mcp-panel-header {
   display: none;
 }
+
+/* ============================================
+   Agent Run Blocks
+   ============================================ */
+
+.agent-run-block {
+  margin-bottom: var(--space-md);
+  border-left: 3px solid var(--chat-accent);
+  padding: var(--space-sm) var(--space-md);
+  background-color: #2d2d30;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.agent-run-block[data-status='completed'] {
+  border-left-color: var(--chat-success);
+}
+
+.agent-run-block[data-status='error'] {
+  border-left-color: var(--chat-error);
+}
+
+.agent-run-block[data-status='aborted'] {
+  border-left-color: var(--chat-warning);
+}
+
+.agent-run-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+  font-weight: 600;
+}
+
+.agent-run-icon {
+  flex-shrink: 0;
+}
+
+.agent-run-title {
+  color: var(--chat-accent);
+  flex: 1;
+}
+
+.agent-run-model {
+  font-size: var(--font-size-xs);
+  color: var(--chat-text-muted);
+  font-weight: normal;
+}
+
+.agent-abort-btn {
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+  background-color: var(--chat-error);
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: var(--chat-font);
+}
+
+.agent-abort-btn:hover {
+  opacity: 0.9;
+}
+
+.agent-run-task {
+  color: var(--chat-text-muted);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.agent-run-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.agent-status-badge {
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  border-radius: 3px;
+  background-color: rgba(86, 156, 214, 0.2);
+  color: var(--chat-accent);
+}
+
+.agent-run-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* Spinner */
+.agent-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--chat-text-muted);
+  border-top-color: var(--chat-accent);
+  border-radius: 50%;
+  animation: agent-spin 0.8s linear infinite;
+}
+
+@keyframes agent-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Text blocks */
+.agent-block-text {
+  color: var(--chat-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+/* Thinking blocks */
+.agent-block-thinking {
+  border-left: 2px solid var(--chat-text-muted);
+  padding-left: var(--space-sm);
+}
+
+.agent-thinking-trigger {
+  background: transparent;
+  border: none;
+  color: var(--chat-text-muted);
+  cursor: pointer;
+  font-family: var(--chat-font);
+  font-size: var(--font-size-xs);
+  padding: 0;
+}
+
+.agent-thinking-trigger:hover {
+  color: var(--chat-text);
+}
+
+.agent-thinking-content {
+  color: var(--chat-text-muted);
+  font-size: var(--font-size-xs);
+  white-space: pre-wrap;
+  margin-top: var(--space-xs);
+}
+
+/* Status blocks */
+.agent-block-status {
+  color: var(--chat-text-muted);
+  font-size: var(--font-size-xs);
+  font-style: italic;
+}
+
+/* Tool blocks */
+.agent-block-tool {
+  background-color: var(--chat-bg);
+  border: 1px solid var(--chat-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.agent-block-tool[data-status='completed'] {
+  border-color: var(--chat-success);
+}
+
+.agent-block-tool[data-status='error'] {
+  border-color: var(--chat-error);
+}
+
+.agent-tool-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--chat-bg-secondary);
+  border: none;
+  color: var(--chat-text);
+  cursor: pointer;
+  font-family: var(--chat-font);
+  font-size: var(--font-size-sm);
+}
+
+.agent-tool-trigger:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.agent-tool-name {
+  font-weight: 600;
+  color: var(--chat-accent);
+}
+
+.agent-tool-status {
+  flex-shrink: 0;
+}
+
+.agent-tool-content {
+  padding: var(--space-sm);
+  font-size: var(--font-size-xs);
+  overflow-x: auto;
+}
+
+.agent-tool-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--chat-string);
+}
+
+.bash-command {
+  color: var(--chat-prompt);
+  margin-bottom: var(--space-xs);
+}
+
+.edit-path,
+.read-path,
+.write-path,
+.grep-path {
+  color: var(--chat-text-muted);
+}
+
+.grep-pattern {
+  color: var(--chat-warning);
+}
+
+.read-range,
+.write-size {
+  font-size: var(--font-size-xs);
+  color: var(--chat-text-muted);
+  margin-left: var(--space-sm);
+}
+
+.tool-name-label {
+  color: var(--chat-accent);
+  font-weight: 600;
+  margin-bottom: var(--space-xs);
+}
+
+/* Truncate toggle */
+.agent-truncate-toggle {
+  background: transparent;
+  border: none;
+  color: var(--chat-accent);
+  cursor: pointer;
+  font-family: var(--chat-font);
+  font-size: var(--font-size-xs);
+  padding: var(--space-xs) 0;
+}
+
+.agent-truncate-toggle:hover {
+  text-decoration: underline;
+}
+
+/* Footer */
+.agent-run-footer {
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--chat-border);
+  font-size: var(--font-size-xs);
+  color: var(--chat-text-muted);
+}
+
+/* Error */
+.agent-run-error {
+  margin-top: var(--space-sm);
+  color: var(--chat-error);
+  font-size: var(--font-size-sm);
+}
+
+/* Steer input */
+.agent-steer-input {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--chat-border);
+}
+
+.agent-steer-input input {
+  flex: 1;
+  background: var(--chat-bg);
+  color: var(--chat-text);
+  border: 1px solid var(--chat-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-xs) var(--space-sm);
+  font-family: var(--chat-font);
+  font-size: var(--font-size-xs);
+}
+
+.agent-steer-input input:focus {
+  border-color: var(--chat-accent);
+  outline: none;
+}
+
+.agent-steer-input button {
+  padding: var(--space-xs) var(--space-sm);
+  background: var(--chat-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: var(--chat-font);
+  font-size: var(--font-size-xs);
+}
+
+.agent-steer-input button:hover {
+  opacity: 0.9;
+}

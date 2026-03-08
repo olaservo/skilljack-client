@@ -38,6 +38,7 @@ export function createPiAdapter(): CodingAgentAdapter {
   let proc: ChildProcess | null = null;
   let rl: readline.Interface | null = null;
   let running = false;
+  let procExited = false;
 
   function sendCommand(cmd: Record<string, unknown>): void {
     if (!proc?.stdin) throw new Error('Pi process not started');
@@ -50,7 +51,6 @@ export function createPiAdapter(): CodingAgentAdapter {
       const args = ['--mode', 'rpc'];
       if (config.provider) args.push('--provider', config.provider);
       if (config.model) args.push('--model', config.model);
-      if (config.args) args.push(...config.args);
 
       // Filter env vars through allowlist to prevent the renderer from
       // overriding sensitive variables like PATH or LD_PRELOAD.
@@ -71,6 +71,12 @@ export function createPiAdapter(): CodingAgentAdapter {
       });
 
       rl = readline.createInterface({ input: proc.stdout!, terminal: false });
+
+      // Track process exit so execute() can detect a dead process between calls
+      procExited = false;
+      proc.on('close', () => {
+        procExited = true;
+      });
 
       // Collect stderr for diagnostics (capped at 4KB to prevent unbounded growth)
       let stderrBuf = '';
@@ -109,7 +115,10 @@ export function createPiAdapter(): CodingAgentAdapter {
           proc!.off('exit', onExit);
         };
         // Generous fallback — if pi emits no stdout at all, eventually continue
-        const timeout = setTimeout(onReady, 5000);
+        const timeout = setTimeout(() => {
+          console.warn('[PiAdapter] pi did not emit a ready signal within 5s, proceeding optimistically');
+          onReady();
+        }, 5000);
         rl!.once('line', onReady);
         proc!.on('error', onError);
         proc!.on('exit', onExit);
@@ -118,6 +127,7 @@ export function createPiAdapter(): CodingAgentAdapter {
 
     async *execute(task: string): AsyncIterable<AgentEvent> {
       if (!proc?.stdin || !rl) throw new Error('Pi process not started');
+      if (procExited) throw new Error('Pi process has already exited');
 
       if (task.length > MAX_TASK_LENGTH) {
         throw new Error(`Task too long (${task.length} chars, max ${MAX_TASK_LENGTH})`);
@@ -211,6 +221,7 @@ export function createPiAdapter(): CodingAgentAdapter {
         proc = null;
         rl = null;
         running = false;
+        procExited = false;
       }
     },
 

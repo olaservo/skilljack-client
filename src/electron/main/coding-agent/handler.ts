@@ -35,6 +35,7 @@ export function registerCodingAgentHandlers(win: BrowserWindow): void {
 
   ipcMain.handle(AGENT_EXECUTE, async (_event, task: string) => {
     if (!adapter) throw new Error('Coding agent not started');
+    if (adapter.isRunning()) throw new Error('Agent is already executing a task');
 
     for await (const event of adapter.execute(task)) {
       if (!win.isDestroyed()) {
