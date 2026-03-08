@@ -21,6 +21,9 @@ interface AgentEvent {
   [key: string]: unknown;
 }
 
+/** Track aborted message IDs so post-abort events are ignored */
+const abortedMessageIds = new Set<string>();
+
 export function useCodingAgent() {
   const { dispatch, state } = useChat();
   const abortRef = useRef<(() => void) | null>(null);
@@ -83,8 +86,12 @@ export function useCodingAgent() {
   }, []);
 
   const abort = useCallback(async () => {
-    await abortRef.current?.();
-  }, []);
+    if (abortRef.current && state.agentRun) {
+      abortedMessageIds.add(state.agentRun.messageId);
+      dispatch({ type: 'AGENT_RUN_ABORT', messageId: state.agentRun.messageId });
+      await abortRef.current();
+    }
+  }, [state.agentRun, dispatch]);
 
   return { steer, abort };
 }
@@ -98,6 +105,15 @@ export function handleAgentEvent(
   messageId: string,
   event: AgentEvent
 ): void {
+  // Ignore events for messages that were already aborted
+  if (abortedMessageIds.has(messageId)) {
+    if (event.type === 'complete' || event.type === 'error') {
+      // Terminal event — clean up tracking
+      abortedMessageIds.delete(messageId);
+    }
+    return;
+  }
+
   switch (event.type) {
     case 'text_delta': {
       const textDelta = typeof event.delta === 'string' ? event.delta : '';

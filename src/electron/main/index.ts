@@ -117,7 +117,10 @@ app.on('window-all-closed', () => {
 });
 
 // Clean up before quit — use preventDefault to ensure async cleanup completes
-app.on('before-quit', (e) => {
+let isQuitting = false;
+const quitHandler = (e: Electron.Event) => {
+  if (isQuitting) return;
+  isQuitting = true;
   e.preventDefault();
   log.info('Application quitting, cleaning up...');
   cleanupIPCHandlers();
@@ -128,11 +131,11 @@ app.on('before-quit', (e) => {
     .catch((err) => log.error('Cleanup error:', err))
     .finally(() => {
       serverManager = null;
-      // Remove this handler to avoid infinite loop, then quit
-      app.removeAllListeners('before-quit');
+      app.removeListener('before-quit', quitHandler);
       app.quit();
     });
-});
+};
+app.on('before-quit', quitHandler);
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (error) => {

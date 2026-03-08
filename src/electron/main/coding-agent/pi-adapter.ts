@@ -47,7 +47,9 @@ export function createPiAdapter(): CodingAgentAdapter {
 
   return {
     async start(config: CodingAgentConfig) {
-      const cliPath = config.cliPath ?? 'pi';
+      // Hardcode CLI path — ignore any renderer-supplied value to prevent
+      // arbitrary command execution from the untrusted renderer context.
+      const cliPath = 'pi';
       const args = ['--mode', 'rpc'];
       if (config.provider) args.push('--provider', config.provider);
       if (config.model) args.push('--model', config.model);
@@ -206,16 +208,19 @@ export function createPiAdapter(): CodingAgentAdapter {
       if (proc) {
         // Only attempt to kill if the process is still alive
         if (proc.exitCode === null && !proc.killed) {
-          proc.kill('SIGTERM');
+          const p = proc; // Capture reference before async gap
           await new Promise<void>((res) => {
-            const timeout = setTimeout(() => {
-              proc?.kill('SIGKILL');
-              res();
-            }, 2000);
-            proc?.on('exit', () => {
+            const onExit = () => {
               clearTimeout(timeout);
               res();
-            });
+            };
+            const timeout = setTimeout(() => {
+              p.off('exit', onExit);
+              p.kill('SIGKILL');
+              res();
+            }, 2000);
+            p.once('exit', onExit);
+            p.kill('SIGTERM');
           });
         }
         proc = null;

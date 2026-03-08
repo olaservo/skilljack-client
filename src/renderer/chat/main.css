@@ -1245,7 +1245,7 @@
   margin-bottom: var(--space-md);
   border-left: 3px solid var(--chat-accent);
   padding: var(--space-sm) var(--space-md);
-  background-color: #2d2d30;
+  background-color: var(--chat-bg-secondary);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 

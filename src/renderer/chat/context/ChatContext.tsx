@@ -478,6 +478,14 @@ export function ChatProvider({ children }: ChatProviderProps) {
       let processedContent = content.trim();
 
       // Check for /code command — hand off to coding agent
+      if (processedContent === '/code') {
+        addMessage({
+          type: 'text',
+          role: 'system',
+          content: 'Usage: `/code <task>` - Hand off a coding task to the autonomous coding agent.',
+        });
+        return;
+      }
       if (processedContent.startsWith('/code ')) {
         const codeTask = processedContent.slice(6).trim();
         if (codeTask) {

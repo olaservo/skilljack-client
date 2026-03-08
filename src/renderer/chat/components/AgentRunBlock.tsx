@@ -5,7 +5,7 @@
  * (text, tool calls, thinking, status) produced by the coding agent.
  */
 
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import type { AgentRunMessage, AgentBlock, AgentToolBlock as AgentToolBlockType } from '../types';
 
 /** Max characters to show for tool results before truncating */
@@ -111,7 +111,7 @@ export function AgentRunBlock({ message, onSteer, onAbort }: AgentRunBlockProps)
 // Block Renderer
 // ============================================
 
-function AgentBlockRenderer({ block }: { block: AgentBlock }) {
+const AgentBlockRenderer = memo(function AgentBlockRenderer({ block }: { block: AgentBlock }) {
   switch (block.type) {
     case 'text':
       return <div className="agent-block-text">{block.content}</div>;
@@ -125,7 +125,7 @@ function AgentBlockRenderer({ block }: { block: AgentBlock }) {
     case 'status':
       return <div className="agent-block-status">{block.message}</div>;
   }
-}
+});
 
 // ============================================
 // Thinking Block (collapsible)
