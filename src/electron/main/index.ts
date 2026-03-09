@@ -13,7 +13,7 @@ import * as path from 'node:path';
 import log from 'electron-log';
 import { setupIPCHandlers, cleanupIPCHandlers } from './ipc-handlers.js';
 import { McpManager } from './mcp-manager.js';
-import { registerCodingAgentHandlers, shutdownCodingAgent } from './coding-agent/index.js';
+import { registerCodingAgentHandlers, unregisterCodingAgentHandlers, shutdownCodingAgent } from './coding-agent/index.js';
 
 // Configure logging
 log.transports.file.level = 'info';
@@ -124,6 +124,7 @@ const quitHandler = (e: Electron.Event) => {
   e.preventDefault();
   log.info('Application quitting, cleaning up...');
   cleanupIPCHandlers();
+  unregisterCodingAgentHandlers();
   Promise.all([
     shutdownCodingAgent(),
     serverManager ? serverManager.shutdown() : Promise.resolve(),

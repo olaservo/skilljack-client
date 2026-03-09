@@ -58,7 +58,7 @@ export function AgentRunBlock({ message, onSteer, onAbort }: AgentRunBlockProps)
           </span>
         )}
         {message.status === 'running' && onAbort && (
-          <button className="agent-abort-btn" onClick={onAbort}>
+          <button className="agent-abort-btn" onClick={onAbort} aria-label="Abort agent run">
             Abort
           </button>
         )}
@@ -138,6 +138,8 @@ function AgentThinkingBlock({ content }: { content: string }) {
       <button
         className="agent-thinking-trigger"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-label="Toggle thinking details"
       >
         {open ? '\u25BC' : '\u25B6'} Thinking...
       </button>
@@ -156,7 +158,7 @@ function AgentToolView({ block }: { block: AgentToolBlockType }) {
 
   return (
     <div className="agent-block-tool" data-status={block.status}>
-      <button className="agent-tool-trigger" onClick={() => setOpen(!open)}>
+      <button className="agent-tool-trigger" onClick={() => setOpen(!open)} aria-expanded={open} aria-label={`Toggle ${toolMeta.label} details`}>
         <span className="agent-tool-name">{toolMeta.label}</span>
         <span className="agent-tool-status">
           {block.status === 'running' ? (
@@ -191,6 +193,8 @@ function TruncatedPre({ content, className }: { content: string; className?: str
         <button
           className="agent-truncate-toggle"
           onClick={() => setExpanded(!expanded)}
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Show less content' : 'Show more content'}
         >
           {expanded ? 'Show less' : 'Show more'}
         </button>

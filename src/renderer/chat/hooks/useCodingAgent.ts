@@ -21,14 +21,13 @@ interface AgentEvent {
   [key: string]: unknown;
 }
 
-/** Track aborted message IDs so post-abort events are ignored */
-const abortedMessageIds = new Set<string>();
-
 export function useCodingAgent() {
   const { dispatch, state } = useChat();
   const abortRef = useRef<(() => void) | null>(null);
   const steerRef = useRef<((msg: string) => void) | null>(null);
   const startedRef = useRef(false);
+  /** Track aborted message IDs so post-abort events are ignored */
+  const abortedMessageIdsRef = useRef(new Set<string>());
 
   const startRun = useCallback(
     async (task: string, messageId: string) => {
@@ -48,8 +47,9 @@ export function useCodingAgent() {
 
       // Subscribe to events BEFORE calling execute() to avoid race condition
       // where early events could be missed if the listener isn't set up yet.
+      const abortedIds = abortedMessageIdsRef.current;
       const unsub = api.codingAgent.onEvent((event) => {
-        handleAgentEvent(dispatch, messageId, event as AgentEvent);
+        handleAgentEvent(dispatch, messageId, event as AgentEvent, abortedIds);
       });
 
       try {
@@ -80,7 +80,7 @@ export function useCodingAgent() {
       startedRef.current = false;
       // Clean up stale aborted IDs when no run is active — prevents
       // unbounded growth if a process crashes before sending a terminal event.
-      abortedMessageIds.clear();
+      abortedMessageIdsRef.current.clear();
     }
   }, [state.agentRun, startRun]);
 
@@ -90,7 +90,7 @@ export function useCodingAgent() {
 
   const abort = useCallback(async () => {
     if (abortRef.current && state.agentRun) {
-      abortedMessageIds.add(state.agentRun.messageId);
+      abortedMessageIdsRef.current.add(state.agentRun.messageId);
       dispatch({ type: 'AGENT_RUN_ABORT', messageId: state.agentRun.messageId });
       await abortRef.current();
     }
@@ -103,10 +103,11 @@ export function useCodingAgent() {
  * Handles a single agent event by dispatching the appropriate reducer action.
  * Called from the IPC event listener setup in startRun.
  */
-export function handleAgentEvent(
+function handleAgentEvent(
   dispatch: Dispatch<ChatAction>,
   messageId: string,
-  event: AgentEvent
+  event: AgentEvent,
+  abortedMessageIds: Set<string>
 ): void {
   // Ignore events for messages that were already aborted
   if (abortedMessageIds.has(messageId)) {

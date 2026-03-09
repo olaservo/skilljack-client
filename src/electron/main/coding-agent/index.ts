@@ -1,4 +1,4 @@
-export { registerCodingAgentHandlers, shutdownCodingAgent } from './handler.js';
+export { registerCodingAgentHandlers, unregisterCodingAgentHandlers, shutdownCodingAgent } from './handler.js';
 export type {
   CodingAgentAdapter,
   CodingAgentConfig,

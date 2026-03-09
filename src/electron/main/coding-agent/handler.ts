@@ -48,14 +48,15 @@ export function registerCodingAgentHandlers(win: BrowserWindow): void {
         }
       }
     } catch (err) {
-      // Ensure the UI always receives a terminal event for proper state cleanup
+      // Send terminal error event so the UI can clean up state.
+      // Don't re-throw — the error event is the canonical error path,
+      // re-throwing would cause a duplicate AGENT_RUN_ERROR dispatch.
       if (!win.isDestroyed()) {
         win.webContents.send(AGENT_EVENT, {
           type: 'error',
           message: err instanceof Error ? err.message : 'Unknown error',
         });
       }
-      throw err;
     }
   });
 
@@ -80,6 +81,16 @@ export function registerCodingAgentHandlers(win: BrowserWindow): void {
     if (!adapter) throw new Error('Coding agent not started');
     await adapter.respondToUIRequest(response);
   });
+}
+
+/** Remove all coding agent IPC handlers (call from app before-quit) */
+export function unregisterCodingAgentHandlers(): void {
+  ipcMain.removeHandler(AGENT_START);
+  ipcMain.removeHandler(AGENT_EXECUTE);
+  ipcMain.removeHandler(AGENT_STEER);
+  ipcMain.removeHandler(AGENT_ABORT);
+  ipcMain.removeHandler(AGENT_STOP);
+  ipcMain.removeHandler(AGENT_UI_RESPONSE);
 }
 
 /** Gracefully stop the coding agent (call from app before-quit) */

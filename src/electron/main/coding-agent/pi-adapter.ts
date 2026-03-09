@@ -20,6 +20,9 @@ import type {
 /** Maximum task length in characters (100KB) */
 const MAX_TASK_LENGTH = 100_000;
 
+/** Pattern for validating CLI argument values (provider, model) */
+const SAFE_ARG_PATTERN = /^[a-zA-Z0-9._:/-]{1,128}$/;
+
 /** Allowlist of environment variable names the renderer may set */
 const ALLOWED_ENV_KEYS = new Set([
   'ANTHROPIC_API_KEY',
@@ -43,6 +46,7 @@ export function createPiAdapter(): CodingAgentAdapter {
 
   function sendCommand(cmd: Record<string, unknown>): void {
     if (!proc?.stdin || !proc.stdin.writable) throw new Error('Pi process not available for commands');
+    // Fire-and-forget: commands are small (<1KB) and infrequent, so backpressure is not expected.
     proc.stdin.write(JSON.stringify(cmd) + '\n');
   }
 
@@ -52,8 +56,14 @@ export function createPiAdapter(): CodingAgentAdapter {
       // arbitrary command execution from the untrusted renderer context.
       const cliPath = 'pi';
       const args = ['--mode', 'rpc'];
-      if (config.provider) args.push('--provider', config.provider);
-      if (config.model) args.push('--model', config.model);
+      if (config.provider) {
+        if (!SAFE_ARG_PATTERN.test(config.provider)) throw new Error('Invalid provider name');
+        args.push('--provider', config.provider);
+      }
+      if (config.model) {
+        if (!SAFE_ARG_PATTERN.test(config.model)) throw new Error('Invalid model name');
+        args.push('--model', config.model);
+      }
 
       // Filter env vars through allowlist to prevent the renderer from
       // overriding sensitive variables like PATH or LD_PRELOAD.
@@ -108,13 +118,15 @@ export function createPiAdapter(): CodingAgentAdapter {
           reject(new Error(`Failed to start pi: ${err.message}`));
         };
         const onExit = (code: number | null) => {
+          cleanup();
           if (code !== null && code !== 0) {
-            cleanup();
             reject(
               new Error(
                 `Pi process exited with code ${code}${stderrBuf ? `: ${stderrBuf.slice(0, 500)}` : ''}`
               )
             );
+          } else if (code === 0) {
+            reject(new Error('Pi process exited immediately (code 0) without producing output'));
           }
         };
         const cleanup = () => {

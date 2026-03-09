@@ -1425,7 +1425,7 @@
 }
 
 .agent-tool-trigger:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--chat-bg-secondary);
 }
 
 .agent-tool-name {
