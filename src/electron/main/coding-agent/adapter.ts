@@ -21,8 +21,10 @@ export interface CodingAgentConfig {
   model?: string;
   /** Environment variables (e.g. API keys) */
   env?: Record<string, string>;
-  /** Timeout in ms. Default: 300000 (5 min) */
+  /** Startup timeout in ms. Default: 5000 */
   timeout?: number;
+  /** Execution timeout in ms. Default: 1800000 (30 min) */
+  executionTimeout?: number;
 }
 
 // ============================================

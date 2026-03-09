@@ -9,6 +9,8 @@
  */
 
 import { ChildProcess, spawn } from 'node:child_process';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
 import * as readline from 'node:readline';
 import type {
   CodingAgentAdapter,
@@ -19,6 +21,9 @@ import type {
 
 /** Maximum task length in characters (100KB) */
 const MAX_TASK_LENGTH = 100_000;
+
+/** Default execution timeout: 30 minutes */
+const DEFAULT_EXECUTION_TIMEOUT_MS = 30 * 60 * 1000;
 
 /** Pattern for validating CLI argument values (provider, model) */
 const SAFE_ARG_PATTERN = /^[a-zA-Z0-9._:/-]{1,128}$/;
@@ -43,6 +48,7 @@ export function createPiAdapter(): CodingAgentAdapter {
   let running = false;
   let procExited = false;
   let bufferedFirstLine: string | null = null;
+  let activeConfig: CodingAgentConfig | null = null;
 
   function sendCommand(cmd: Record<string, unknown>): void {
     if (!proc?.stdin || !proc.stdin.writable) throw new Error('Pi process not available for commands');
@@ -76,9 +82,22 @@ export function createPiAdapter(): CodingAgentAdapter {
         }
       }
 
+      // Validate cwd — must be an absolute, accessible directory
+      const cwd = config.cwd;
+      if (cwd) {
+        if (!path.isAbsolute(cwd)) throw new Error('cwd must be an absolute path');
+        try {
+          fs.accessSync(cwd, fs.constants.R_OK);
+        } catch {
+          throw new Error(`cwd is not accessible: ${cwd}`);
+        }
+      }
+
+      activeConfig = config;
+
       // Spawn pi directly (it may be a native binary or a Node shim on PATH)
       proc = spawn(cliPath, args, {
-        cwd: config.cwd,
+        cwd,
         env: { ...globalThis.process.env, ...safeEnv },
         stdio: ['pipe', 'pipe', 'pipe'],
       });
@@ -200,6 +219,17 @@ export function createPiAdapter(): CodingAgentAdapter {
       // Send prompt command
       sendCommand({ id: `exec_${Date.now()}`, type: 'prompt', message: task });
 
+      // Execution timeout — prevents the UI from hanging forever if pi
+      // neither completes nor crashes.
+      const execTimeout = setTimeout(() => {
+        if (!done) {
+          queue.push({ type: 'error', message: 'Agent execution timed out' });
+          done = true;
+          running = false;
+          resolve?.();
+        }
+      }, activeConfig?.executionTimeout ?? DEFAULT_EXECUTION_TIMEOUT_MS);
+
       try {
         while (!done) {
           if (queue.length > 0) {
@@ -216,6 +246,7 @@ export function createPiAdapter(): CodingAgentAdapter {
           yield queue.shift()!;
         }
       } finally {
+        clearTimeout(execTimeout);
         rl.off('line', onLine);
         proc.off('close', onClose);
       }
@@ -223,11 +254,12 @@ export function createPiAdapter(): CodingAgentAdapter {
 
     async steer(message: string) {
       if (procExited) throw new Error('Pi process has already exited');
+      if (!running) throw new Error('No task is currently running');
       sendCommand({ type: 'steer', message });
     },
 
     async abort() {
-      if (procExited) return; // Silently no-op if already dead
+      if (procExited || !running) return; // No-op if already dead or idle
       sendCommand({ type: 'abort' });
       running = false;
     },
@@ -256,6 +288,7 @@ export function createPiAdapter(): CodingAgentAdapter {
         running = false;
         procExited = false;
         bufferedFirstLine = null;
+        activeConfig = null;
       }
     },
 
@@ -362,7 +395,7 @@ function translatePiEvent(raw: Record<string, unknown>): AgentEvent[] {
     }
 
     case 'auto_compaction_start': {
-      const reason = raw.reason as string;
+      const reason = typeof raw.reason === 'string' ? raw.reason : 'unknown';
       const msg =
         reason === 'overflow'
           ? 'Context overflow \u2014 compacting...'
@@ -371,9 +404,9 @@ function translatePiEvent(raw: Record<string, unknown>): AgentEvent[] {
     }
 
     case 'auto_compaction_end': {
-      const aborted = raw.aborted as boolean;
-      const willRetry = raw.willRetry as boolean;
-      const errorMessage = raw.errorMessage as string | undefined;
+      const aborted = typeof raw.aborted === 'boolean' ? raw.aborted : false;
+      const willRetry = typeof raw.willRetry === 'boolean' ? raw.willRetry : false;
+      const errorMessage = typeof raw.errorMessage === 'string' ? raw.errorMessage : undefined;
 
       let msg: string;
       if (aborted && willRetry) {
@@ -387,19 +420,19 @@ function translatePiEvent(raw: Record<string, unknown>): AgentEvent[] {
     }
 
     case 'auto_retry_start': {
-      const attempt = raw.attempt as number;
-      const maxAttempts = raw.maxAttempts as number;
-      const delayMs = raw.delayMs as number;
-      const errorMessage = raw.errorMessage as string;
+      const attempt = typeof raw.attempt === 'number' ? raw.attempt : 0;
+      const maxAttempts = typeof raw.maxAttempts === 'number' ? raw.maxAttempts : 0;
+      const delayMs = typeof raw.delayMs === 'number' ? raw.delayMs : 0;
+      const errorMessage = typeof raw.errorMessage === 'string' ? raw.errorMessage : 'Unknown error';
       const delaySec = Math.round(delayMs / 1000);
       const msg = `Retrying (${attempt}/${maxAttempts}) in ${delaySec}s: ${errorMessage}`;
       return [{ type: 'status', message: msg, detail: { attempt, maxAttempts, delayMs, errorMessage } }];
     }
 
     case 'auto_retry_end': {
-      const success = raw.success as boolean;
-      const attempt = raw.attempt as number;
-      const finalError = raw.finalError as string | undefined;
+      const success = typeof raw.success === 'boolean' ? raw.success : false;
+      const attempt = typeof raw.attempt === 'number' ? raw.attempt : 0;
+      const finalError = typeof raw.finalError === 'string' ? raw.finalError : undefined;
       if (!success && finalError) {
         return [{ type: 'status', message: `Retry failed after ${attempt} attempts: ${finalError}` }];
       }
@@ -458,13 +491,18 @@ function translatePiEvent(raw: Record<string, unknown>): AgentEvent[] {
         return [{ type: 'status', message: msg }];
       }
 
-      // Interactive methods (select, confirm, input, editor) require host response
+      // Interactive methods (select, confirm, input, editor) require host response.
+      // Explicitly pick expected fields — avoid spreading raw subprocess data into IPC.
       return [
         {
-          type: 'ui_request',
+          type: 'ui_request' as const,
           id: raw.id as string,
           method,
-          ...(raw as Record<string, unknown>),
+          message: typeof raw.message === 'string' ? raw.message : undefined,
+          options: Array.isArray(raw.options) ? raw.options : undefined,
+          title: typeof raw.title === 'string' ? raw.title : undefined,
+          placeholder: typeof raw.placeholder === 'string' ? raw.placeholder : undefined,
+          defaultValue: typeof raw.defaultValue === 'string' ? raw.defaultValue : undefined,
         },
       ];
     }

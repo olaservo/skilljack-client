@@ -21,20 +21,29 @@ import {
 // NOTE: Module-level singleton — assumes a single BrowserWindow.
 // If multi-window support is added, this should become a Map<BrowserWindow, CodingAgentAdapter>.
 let adapter: CodingAgentAdapter | null = null;
+let starting = false;
 
 export function registerCodingAgentHandlers(win: BrowserWindow): void {
   ipcMain.handle(AGENT_START, async (_event, config: CodingAgentConfig) => {
-    // Reuse existing adapter if its process is alive and idle
-    if (adapter && adapter.isProcessAlive() && !adapter.isRunning()) {
-      return;
+    // Guard against concurrent start() calls — ipcMain.handle does NOT
+    // serialize async handlers, so two calls can interleave at await points.
+    if (starting) return;
+    starting = true;
+    try {
+      // Reuse existing adapter if its process is alive and idle
+      if (adapter && adapter.isProcessAlive() && !adapter.isRunning()) {
+        return;
+      }
+      // Stop any existing adapter before starting a new one
+      if (adapter) {
+        await adapter.stop();
+      }
+      adapter = createPiAdapter();
+      // Default cwd to main process working directory (renderer can't access process.cwd)
+      await adapter.start({ ...config, cwd: config.cwd || process.cwd() });
+    } finally {
+      starting = false;
     }
-    // Stop any existing adapter before starting a new one
-    if (adapter) {
-      await adapter.stop();
-    }
-    adapter = createPiAdapter();
-    // Default cwd to main process working directory (renderer can't access process.cwd)
-    await adapter.start({ ...config, cwd: config.cwd || process.cwd() });
   });
 
   ipcMain.handle(AGENT_EXECUTE, async (_event, task: string) => {
