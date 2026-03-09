@@ -23,6 +23,25 @@ import {
 let adapter: CodingAgentAdapter | null = null;
 let starting = false;
 
+/**
+ * Compare process-affecting config fields. Returns true if the new config
+ * requires restarting the pi subprocess (different provider, model, env, or cwd).
+ * Timeout/executionTimeout are per-execution and don't require a restart.
+ */
+function processConfigChanged(
+  active: CodingAgentConfig | null,
+  incoming: CodingAgentConfig
+): boolean {
+  if (!active) return true;
+  if (active.provider !== incoming.provider) return true;
+  if (active.model !== incoming.model) return true;
+  if (active.cwd !== (incoming.cwd || process.cwd())) return true;
+  // Compare env by serialized value (both are small Record<string, string>)
+  const activeEnv = JSON.stringify(active.env ?? {});
+  const incomingEnv = JSON.stringify(incoming.env ?? {});
+  return activeEnv !== incomingEnv;
+}
+
 export function registerCodingAgentHandlers(win: BrowserWindow): void {
   ipcMain.handle(AGENT_START, async (_event, config: CodingAgentConfig) => {
     // Guard against concurrent start() calls — ipcMain.handle does NOT
@@ -30,9 +49,13 @@ export function registerCodingAgentHandlers(win: BrowserWindow): void {
     if (starting) return;
     starting = true;
     try {
-      // Reuse existing adapter if its process is alive and idle
+      // Reuse existing adapter if its process is alive, idle, and config unchanged
       if (adapter && adapter.isProcessAlive() && !adapter.isRunning()) {
-        return;
+        if (!processConfigChanged(adapter.getActiveConfig(), config)) {
+          return;
+        }
+        // Config changed — stop existing process so a new one starts with updated settings
+        await adapter.stop();
       }
       // Stop any existing adapter before starting a new one
       if (adapter) {

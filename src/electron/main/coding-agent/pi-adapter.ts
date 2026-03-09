@@ -49,6 +49,8 @@ export function createPiAdapter(): CodingAgentAdapter {
   let procExited = false;
   let bufferedFirstLine: string | null = null;
   let activeConfig: CodingAgentConfig | null = null;
+  // Shared abort signal: execute() sets this so abort() can terminate the generator
+  let abortCallback: (() => void) | null = null;
 
   function sendCommand(cmd: Record<string, unknown>): void {
     if (!proc?.stdin || !proc.stdin.writable) throw new Error('Pi process not available for commands');
@@ -210,6 +212,14 @@ export function createPiAdapter(): CodingAgentAdapter {
       rl.on('line', onLine);
       proc.on('close', onClose);
 
+      // Register abort callback so abort() can terminate the generator
+      abortCallback = () => {
+        if (!done) {
+          done = true;
+          resolve?.();
+        }
+      };
+
       // Replay the buffered first line from start() if it was a real event
       if (bufferedFirstLine) {
         onLine(bufferedFirstLine);
@@ -249,6 +259,7 @@ export function createPiAdapter(): CodingAgentAdapter {
         clearTimeout(execTimeout);
         rl.off('line', onLine);
         proc.off('close', onClose);
+        abortCallback = null;
       }
     },
 
@@ -262,6 +273,10 @@ export function createPiAdapter(): CodingAgentAdapter {
       if (procExited || !running) return; // No-op if already dead or idle
       sendCommand({ type: 'abort' });
       running = false;
+      // Terminate the execute() generator so it doesn't hang waiting
+      // for pi to send a terminal event or the execution timeout to fire.
+      abortCallback?.();
+      abortCallback = null;
     },
 
     async stop() {
@@ -302,6 +317,10 @@ export function createPiAdapter(): CodingAgentAdapter {
 
     async respondToUIRequest(response: ExtensionUIResponse) {
       sendCommand(response);
+    },
+
+    getActiveConfig() {
+      return activeConfig;
     },
   };
 }

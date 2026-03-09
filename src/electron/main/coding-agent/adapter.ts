@@ -88,4 +88,7 @@ export interface CodingAgentAdapter {
 
   /** Respond to an extension UI request from the agent */
   respondToUIRequest(response: ExtensionUIResponse): Promise<void>;
+
+  /** Return the config used to start this adapter (for detecting config changes) */
+  getActiveConfig(): CodingAgentConfig | null;
 }
