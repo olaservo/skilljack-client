@@ -39,9 +39,10 @@ export function createPiAdapter(): CodingAgentAdapter {
   let rl: readline.Interface | null = null;
   let running = false;
   let procExited = false;
+  let bufferedFirstLine: string | null = null;
 
   function sendCommand(cmd: Record<string, unknown>): void {
-    if (!proc?.stdin) throw new Error('Pi process not started');
+    if (!proc?.stdin || !proc.stdin.writable) throw new Error('Pi process not available for commands');
     proc.stdin.write(JSON.stringify(cmd) + '\n');
   }
 
@@ -90,9 +91,15 @@ export function createPiAdapter(): CodingAgentAdapter {
       });
 
       // Wait for the first stdout line (pi ready signal) or process failure,
-      // with a generous fallback timeout instead of an arbitrary 500ms delay.
+      // with a configurable fallback timeout.
+      const startTimeout = config.timeout ? Math.min(config.timeout, 30000) : 5000;
       await new Promise<void>((resolve, reject) => {
-        const onReady = () => {
+        const onReady = (line?: string) => {
+          // Buffer the first line so execute() can replay it — avoids
+          // silently dropping a real event if pi doesn't send a dedicated ready signal.
+          if (typeof line === 'string') {
+            bufferedFirstLine = line;
+          }
           cleanup();
           resolve();
         };
@@ -118,9 +125,9 @@ export function createPiAdapter(): CodingAgentAdapter {
         };
         // Generous fallback — if pi emits no stdout at all, eventually continue
         const timeout = setTimeout(() => {
-          console.warn('[PiAdapter] pi did not emit a ready signal within 5s, proceeding optimistically');
+          console.warn(`[PiAdapter] pi did not emit a ready signal within ${startTimeout / 1000}s, proceeding optimistically`);
           onReady();
-        }, 5000);
+        }, startTimeout);
         rl!.once('line', onReady);
         proc!.on('error', onError);
         proc!.on('exit', onExit);
@@ -130,6 +137,7 @@ export function createPiAdapter(): CodingAgentAdapter {
     async *execute(task: string): AsyncIterable<AgentEvent> {
       if (!proc?.stdin || !rl) throw new Error('Pi process not started');
       if (procExited) throw new Error('Pi process has already exited');
+      if (running) throw new Error('Already executing a task');
 
       if (task.length > MAX_TASK_LENGTH) {
         throw new Error(`Task too long (${task.length} chars, max ${MAX_TASK_LENGTH})`);
@@ -171,6 +179,12 @@ export function createPiAdapter(): CodingAgentAdapter {
       rl.on('line', onLine);
       proc.on('close', onClose);
 
+      // Replay the buffered first line from start() if it was a real event
+      if (bufferedFirstLine) {
+        onLine(bufferedFirstLine);
+        bufferedFirstLine = null;
+      }
+
       // Send prompt command
       sendCommand({ id: `exec_${Date.now()}`, type: 'prompt', message: task });
 
@@ -196,10 +210,12 @@ export function createPiAdapter(): CodingAgentAdapter {
     },
 
     async steer(message: string) {
+      if (procExited) throw new Error('Pi process has already exited');
       sendCommand({ type: 'steer', message });
     },
 
     async abort() {
+      if (procExited) return; // Silently no-op if already dead
       sendCommand({ type: 'abort' });
       running = false;
     },
@@ -227,11 +243,16 @@ export function createPiAdapter(): CodingAgentAdapter {
         rl = null;
         running = false;
         procExited = false;
+        bufferedFirstLine = null;
       }
     },
 
     isRunning() {
       return running;
+    },
+
+    isProcessAlive() {
+      return proc !== null && !procExited;
     },
 
     async respondToUIRequest(response: ExtensionUIResponse) {
@@ -257,7 +278,8 @@ export function createPiAdapter(): CodingAgentAdapter {
  * - extension_error
  */
 function translatePiEvent(raw: Record<string, unknown>): AgentEvent[] {
-  const type = raw.type as string;
+  const type = raw.type;
+  if (typeof type !== 'string') return [];
 
   switch (type) {
     case 'message_update': {
@@ -265,43 +287,67 @@ function translatePiEvent(raw: Record<string, unknown>): AgentEvent[] {
       if (!ame) return [];
       const ameType = ame.type as string;
       if (ameType === 'text_delta') {
-        return [{ type: 'text_delta', delta: ame.delta as string }];
+        const delta = ame.delta;
+        if (typeof delta !== 'string' || !delta) return [];
+        return [{ type: 'text_delta', delta }];
       }
       if (ameType === 'thinking_delta') {
-        return [{ type: 'thinking_delta', delta: ame.delta as string }];
+        const delta = ame.delta;
+        if (typeof delta !== 'string' || !delta) return [];
+        return [{ type: 'thinking_delta', delta }];
       }
       return [];
     }
 
-    case 'tool_execution_start':
+    case 'tool_execution_start': {
+      const toolCallId = raw.toolCallId;
+      const toolName = raw.toolName;
+      if (typeof toolCallId !== 'string' || typeof toolName !== 'string') {
+        console.warn('[PiAdapter] Malformed tool_execution_start event:', raw);
+        return [];
+      }
       return [
         {
           type: 'tool_start',
-          toolCallId: raw.toolCallId as string,
-          toolName: raw.toolName as string,
+          toolCallId,
+          toolName,
           args: (raw.args as Record<string, unknown>) ?? {},
         },
       ];
+    }
 
-    case 'tool_execution_update':
+    case 'tool_execution_update': {
+      const toolCallId = raw.toolCallId;
+      if (typeof toolCallId !== 'string') {
+        console.warn('[PiAdapter] Malformed tool_execution_update event:', raw);
+        return [];
+      }
       return [
         {
           type: 'tool_update',
-          toolCallId: raw.toolCallId as string,
+          toolCallId,
           partialResult: raw.partialResult,
         },
       ];
+    }
 
-    case 'tool_execution_end':
+    case 'tool_execution_end': {
+      const toolCallId = raw.toolCallId;
+      const toolName = raw.toolName;
+      if (typeof toolCallId !== 'string' || typeof toolName !== 'string') {
+        console.warn('[PiAdapter] Malformed tool_execution_end event:', raw);
+        return [];
+      }
       return [
         {
           type: 'tool_end',
-          toolCallId: raw.toolCallId as string,
-          toolName: raw.toolName as string,
+          toolCallId,
+          toolName,
           result: raw.result,
           isError: (raw.isError as boolean) ?? false,
         },
       ];
+    }
 
     case 'auto_compaction_start': {
       const reason = raw.reason as string;

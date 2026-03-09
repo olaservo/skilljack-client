@@ -81,6 +81,9 @@ export interface CodingAgentAdapter {
   /** Check if agent is currently running a task */
   isRunning(): boolean;
 
+  /** Check if the agent process is still alive */
+  isProcessAlive(): boolean;
+
   /** Respond to an extension UI request from the agent */
   respondToUIRequest(response: ExtensionUIResponse): Promise<void>;
 }

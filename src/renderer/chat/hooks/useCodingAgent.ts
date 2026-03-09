@@ -78,6 +78,9 @@ export function useCodingAgent() {
     }
     if (!state.agentRun) {
       startedRef.current = false;
+      // Clean up stale aborted IDs when no run is active — prevents
+      // unbounded growth if a process crashes before sending a terminal event.
+      abortedMessageIds.clear();
     }
   }, [state.agentRun, startRun]);
 

@@ -24,6 +24,10 @@ let adapter: CodingAgentAdapter | null = null;
 
 export function registerCodingAgentHandlers(win: BrowserWindow): void {
   ipcMain.handle(AGENT_START, async (_event, config: CodingAgentConfig) => {
+    // Reuse existing adapter if its process is alive and idle
+    if (adapter && adapter.isProcessAlive() && !adapter.isRunning()) {
+      return;
+    }
     // Stop any existing adapter before starting a new one
     if (adapter) {
       await adapter.stop();
@@ -37,10 +41,21 @@ export function registerCodingAgentHandlers(win: BrowserWindow): void {
     if (!adapter) throw new Error('Coding agent not started');
     if (adapter.isRunning()) throw new Error('Agent is already executing a task');
 
-    for await (const event of adapter.execute(task)) {
-      if (!win.isDestroyed()) {
-        win.webContents.send(AGENT_EVENT, event);
+    try {
+      for await (const event of adapter.execute(task)) {
+        if (!win.isDestroyed()) {
+          win.webContents.send(AGENT_EVENT, event);
+        }
       }
+    } catch (err) {
+      // Ensure the UI always receives a terminal event for proper state cleanup
+      if (!win.isDestroyed()) {
+        win.webContents.send(AGENT_EVENT, {
+          type: 'error',
+          message: err instanceof Error ? err.message : 'Unknown error',
+        });
+      }
+      throw err;
     }
   });
 
