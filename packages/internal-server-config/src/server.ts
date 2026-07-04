@@ -184,13 +184,15 @@ export function createServer(): ServerFactoryResponse {
         inputSchema = z.object({});
     }
 
-    // Using type assertion to avoid TypeScript type recursion issue with SDK generics
+    // Using type assertion to avoid TypeScript type recursion issue with SDK generics.
+    // registerTool expects the Zod RAW SHAPE, not the z.object(...) wrapper —
+    // passing the object makes tools/list advertise an empty input schema.
     (server.registerTool as Function)(
       tool.displayName,
       {
         title: tool.title,
         description: tool.description,
-        inputSchema,
+        inputSchema: (inputSchema as z.ZodObject<z.ZodRawShape>).shape,
         annotations: tool.annotations,
       },
       async (args: unknown) => {

@@ -827,8 +827,17 @@ export class McpManager {
     await writeFile(configPath, JSON.stringify(fileConfig, null, 2), 'utf-8');
     log.info(`Removed server config: ${name}`);
 
-    // Reload configuration
-    await this.loadConfig(configPath);
+    // Remove just this server — a full loadConfig would restart every
+    // other server and can take long enough that UI requests time out
+    if (this.lifecycleManager) {
+      try {
+        await this.lifecycleManager.removeServer(name);
+      } catch (err) {
+        log.warn(`Failed to remove server "${name}" from lifecycle manager:`, err);
+      }
+    }
+    this.notifyToolsChanged();
+    this.sendToRenderer(channels.ON_SERVERS_CHANGED, undefined);
   }
 
   // ============================================

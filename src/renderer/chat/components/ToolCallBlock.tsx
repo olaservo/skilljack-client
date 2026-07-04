@@ -12,6 +12,8 @@ import type { ChatToolCall } from '../types';
 import { useToolExecution } from '../hooks';
 import { isForUser } from '../../../shared/content-annotations.js';
 import type { AnnotatedContentItem } from '../../../shared/types.js';
+import { AcpDiffBlock } from './AcpDiffBlock';
+import { AcpTerminalBlock } from './AcpTerminalBlock';
 
 interface ToolCallBlockProps {
   toolCall: ChatToolCall;
@@ -140,12 +142,14 @@ export function ToolCallBlock({ toolCall, messageId }: ToolCallBlockProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { executeTool } = useToolExecution();
 
-  const hasContent =
-    Object.keys(toolCall.arguments).length > 0 ||
-    toolCall.result !== undefined;
+  const acp = toolCall.acp;
+  const hasContent = acp
+    ? acp.contentBlocks.length > 0 || acp.rawInput != null || acp.rawOutput != null || acp.locations.length > 0
+    : Object.keys(toolCall.arguments).length > 0 || toolCall.result !== undefined;
 
   const annotationBadges = getAnnotationBadges(toolCall.annotations);
-  const isPending = toolCall.status === 'pending';
+  // ACP tool calls never expose a Run button — the agent executes them itself
+  const isPending = !acp && toolCall.status === 'pending';
 
   const handleRun = (e: React.MouseEvent) => {
     e.stopPropagation(); // Don't toggle collapsible
@@ -162,6 +166,9 @@ export function ToolCallBlock({ toolCall, messageId }: ToolCallBlockProps) {
         <button className="tool-call-header" disabled={!hasContent}>
           <ChevronIcon open={isOpen} />
           <span className="tool-call-name">{toolCall.displayName}</span>
+          {acp && acp.kind !== 'other' && (
+            <span className="tool-call-kind-badge">{acp.kind.replace('_', ' ')}</span>
+          )}
           <span className="tool-call-server">{toolCall.serverName}</span>
           {annotationBadges.map((badge) => (
             <span
@@ -188,6 +195,67 @@ export function ToolCallBlock({ toolCall, messageId }: ToolCallBlockProps) {
       </Collapsible.Trigger>
 
       <Collapsible.Content className="tool-call-content">
+        {acp ? (
+          <>
+            {acp.locations.length > 0 && (
+              <div className="tool-call-section">
+                <div className="tool-call-section-label">Files:</div>
+                <ul className="acp-locations">
+                  {acp.locations.map((loc, index) => (
+                    <li key={index}>
+                      {loc.path}
+                      {loc.line != null ? `:${loc.line}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {acp.contentBlocks.map((block, index) => {
+              switch (block.type) {
+                case 'diff':
+                  return (
+                    <AcpDiffBlock
+                      key={index}
+                      path={block.path}
+                      oldText={block.oldText ?? null}
+                      newText={block.newText}
+                    />
+                  );
+                case 'terminal':
+                  return (
+                    <AcpTerminalBlock
+                      key={index}
+                      terminalId={block.terminalId}
+                      active={toolCall.status === 'executing'}
+                    />
+                  );
+                case 'content':
+                  return block.block.text ? (
+                    <pre key={index} className="acp-tool-content">
+                      {block.block.text}
+                    </pre>
+                  ) : null;
+                default:
+                  return null;
+              }
+            })}
+
+            {acp.contentBlocks.length === 0 && acp.rawInput != null && (
+              <div className="tool-call-section">
+                <div className="tool-call-section-label">Input:</div>
+                <pre>{JSON.stringify(acp.rawInput, null, 2)}</pre>
+              </div>
+            )}
+            {acp.contentBlocks.length === 0 && acp.rawOutput != null && (
+              <div className="tool-call-section">
+                <div className="tool-call-section-label">Output:</div>
+                <pre>{typeof acp.rawOutput === 'string' ? acp.rawOutput : JSON.stringify(acp.rawOutput, null, 2)}</pre>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
         {Object.keys(toolCall.arguments).length > 0 && (
           <div className="tool-call-section">
             <div className="tool-call-section-label">Arguments:</div>
@@ -211,6 +279,8 @@ export function ToolCallBlock({ toolCall, messageId }: ToolCallBlockProps) {
             </div>
           );
         })()}
+          </>
+        )}
       </Collapsible.Content>
     </Collapsible.Root>
   );

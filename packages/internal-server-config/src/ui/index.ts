@@ -8,8 +8,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// Resolved lazily: when this package is bundled into the Electron main
+// process (CJS), import.meta.url is unavailable — but that build loads UI
+// HTML via ?raw imports and never calls these loaders.
+function getModuleDir(): string {
+  return dirname(fileURLToPath(import.meta.url));
+}
 
 // Cache for loaded UI content
 let serverConfigUICache: string | null = null;
@@ -21,7 +25,7 @@ let mcpbConfirmUICache: string | null = null;
  */
 export function getServerConfigUI(): string {
   if (serverConfigUICache === null) {
-    const htmlPath = join(__dirname, 'server-config.html');
+    const htmlPath = join(getModuleDir(), 'server-config.html');
     serverConfigUICache = readFileSync(htmlPath, 'utf-8');
   }
   return serverConfigUICache;
@@ -33,7 +37,7 @@ export function getServerConfigUI(): string {
  */
 export function getMcpbConfirmUI(): string {
   if (mcpbConfirmUICache === null) {
-    const htmlPath = join(__dirname, 'mcpb-confirm.html');
+    const htmlPath = join(getModuleDir(), 'mcpb-confirm.html');
     mcpbConfirmUICache = readFileSync(htmlPath, 'utf-8');
   }
   return mcpbConfirmUICache;

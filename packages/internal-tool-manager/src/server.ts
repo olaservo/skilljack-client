@@ -11,11 +11,12 @@ import { getToolManagerUI } from './ui/index.js';
 // Schema for standalone server registration
 const ManageToolsInputSchema = z.object({});
 
-// Tool configuration (following everything server pattern)
+// Tool configuration (following everything server pattern).
+// registerTool expects the Zod RAW SHAPE, not the z.object(...) wrapper.
 const manageToolsConfig = {
   title: 'Manage Tools',
   description: MANAGE_TOOLS_TOOL.description,
-  inputSchema: ManageToolsInputSchema,
+  inputSchema: ManageToolsInputSchema.shape,
 };
 
 export interface ServerFactoryResponse {

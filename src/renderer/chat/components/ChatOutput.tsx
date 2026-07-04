@@ -8,6 +8,9 @@
 import { useRef, useEffect } from 'react';
 import type { ChatMessage } from '../types';
 import { MessageBubble } from './MessageBubble';
+import { PlanBlock } from './PlanBlock';
+import { AcpPermissionCard } from './AcpPermissionCard';
+import { useChat } from '../context/ChatContext';
 
 interface ChatOutputProps {
   messages: ChatMessage[];
@@ -15,8 +18,11 @@ interface ChatOutputProps {
 }
 
 export function ChatOutput({ messages, isProcessing }: ChatOutputProps) {
+  const { state } = useChat();
   const containerRef = useRef<HTMLDivElement>(null);
   const shouldScrollRef = useRef(true);
+  const acpPlan = state.acpSession?.plan;
+  const activePermission = state.acpSession?.activePermission;
 
   // Track if user has scrolled up
   const handleScroll = () => {
@@ -26,12 +32,12 @@ export function ChatOutput({ messages, isProcessing }: ChatOutputProps) {
     shouldScrollRef.current = scrollHeight - scrollTop - clientHeight < 50;
   };
 
-  // Auto-scroll on new messages
+  // Auto-scroll on new messages (and when a permission card appears)
   useEffect(() => {
     if (shouldScrollRef.current && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, activePermission]);
 
   return (
     <div
@@ -54,6 +60,10 @@ export function ChatOutput({ messages, isProcessing }: ChatOutputProps) {
           <MessageBubble key={message.id} message={message} />
         ))
       )}
+
+      {acpPlan && acpPlan.length > 0 && <PlanBlock entries={acpPlan} />}
+
+      {activePermission && <AcpPermissionCard />}
 
       {isProcessing && !messages.some((m) => m.isStreaming) && (
         <div className="chat-typing">

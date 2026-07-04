@@ -316,6 +316,82 @@ export function createIPCAdapter(electronAPI: ElectronAPI): CommunicationAdapter
     },
 
     // ============================================
+    // ACP Agents (Electron-only)
+    // ============================================
+
+    acp: {
+      async pickDirectory() {
+        const result = await electronAPI.browsePath('directory');
+        return result.path ?? null;
+      },
+
+      async getAgents() {
+        const data = await electronAPI.acpGetAgents();
+        return data.agents || [];
+      },
+
+      addAgent(id, config) {
+        return electronAPI.acpAddAgent(id, config);
+      },
+
+      updateAgent(id, updates) {
+        return electronAPI.acpUpdateAgent(id, updates);
+      },
+
+      removeAgent(id) {
+        return electronAPI.acpRemoveAgent(id);
+      },
+
+      stopAgent(id) {
+        return electronAPI.acpStopAgent(id);
+      },
+
+      newSession(agentId, cwd) {
+        return electronAPI.acpNewSession(agentId, cwd);
+      },
+
+      prompt(sessionId, text) {
+        return electronAPI.acpPrompt(sessionId, text);
+      },
+
+      async cancel(sessionId) {
+        await electronAPI.acpCancel(sessionId);
+      },
+
+      async setMode(sessionId, modeId) {
+        await electronAPI.acpSetMode(sessionId, modeId);
+      },
+
+      async setConfigOption(sessionId, configId, value) {
+        await electronAPI.acpSetConfigOption(sessionId, configId, value);
+      },
+
+      async respondPermission(requestId, outcome) {
+        await electronAPI.acpRespondPermission(requestId, outcome);
+      },
+
+      getTerminalOutput(sessionId, terminalId) {
+        return electronAPI.acpGetTerminalOutput(sessionId, terminalId);
+      },
+
+      onSessionUpdate(callback) {
+        return electronAPI.onAcpSessionUpdate(callback);
+      },
+
+      onPermissionRequest(callback) {
+        return electronAPI.onAcpPermissionRequest(callback);
+      },
+
+      onAgentStatusChanged(callback) {
+        return electronAPI.onAcpAgentStatusChanged(callback);
+      },
+
+      onOpenApp(callback) {
+        return electronAPI.onAcpOpenApp(callback);
+      },
+    },
+
+    // ============================================
     // Cleanup
     // ============================================
 

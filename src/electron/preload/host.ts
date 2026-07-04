@@ -16,6 +16,14 @@ import type {
   ServerRestartingPayload,
   ManagerReadyPayload,
 } from '../../shared/types.js';
+import type {
+  AcpAgentConfig,
+  AcpAgentStatusPayload,
+  AcpOpenAppPayload,
+  AcpPermissionOutcome,
+  AcpPermissionRequestPayload,
+  AcpSessionUpdatePayload,
+} from '../../shared/acp-types.js';
 
 // ============================================
 // Channel Whitelist Validation
@@ -387,6 +395,116 @@ const electronAPI = {
       ipcRenderer.removeListener(channels.ON_MANAGER_READY, handler);
     };
   },
+
+  // ============================================
+  // ACP (Agent Client Protocol)
+  // ============================================
+
+  acpGetAgents: () => {
+    validateInvokeChannel(channels.ACP_GET_AGENTS);
+    return ipcRenderer.invoke(channels.ACP_GET_AGENTS);
+  },
+
+  acpAddAgent: (id: string, config: AcpAgentConfig) => {
+    validateInvokeChannel(channels.ACP_ADD_AGENT);
+    return ipcRenderer.invoke(channels.ACP_ADD_AGENT, id, config);
+  },
+
+  acpUpdateAgent: (id: string, updates: Partial<AcpAgentConfig>) => {
+    validateInvokeChannel(channels.ACP_UPDATE_AGENT);
+    return ipcRenderer.invoke(channels.ACP_UPDATE_AGENT, id, updates);
+  },
+
+  acpRemoveAgent: (id: string) => {
+    validateInvokeChannel(channels.ACP_REMOVE_AGENT);
+    return ipcRenderer.invoke(channels.ACP_REMOVE_AGENT, id);
+  },
+
+  acpStopAgent: (id: string) => {
+    validateInvokeChannel(channels.ACP_STOP_AGENT);
+    return ipcRenderer.invoke(channels.ACP_STOP_AGENT, id);
+  },
+
+  acpNewSession: (agentId: string, cwd: string) => {
+    validateInvokeChannel(channels.ACP_NEW_SESSION);
+    return ipcRenderer.invoke(channels.ACP_NEW_SESSION, agentId, cwd);
+  },
+
+  acpPrompt: (sessionId: string, text: string) => {
+    validateInvokeChannel(channels.ACP_PROMPT);
+    return ipcRenderer.invoke(channels.ACP_PROMPT, sessionId, text);
+  },
+
+  acpCancel: (sessionId: string) => {
+    validateInvokeChannel(channels.ACP_CANCEL);
+    return ipcRenderer.invoke(channels.ACP_CANCEL, sessionId);
+  },
+
+  acpSetMode: (sessionId: string, modeId: string) => {
+    validateInvokeChannel(channels.ACP_SET_MODE);
+    return ipcRenderer.invoke(channels.ACP_SET_MODE, sessionId, modeId);
+  },
+
+  acpSetConfigOption: (sessionId: string, configId: string, value: string | boolean) => {
+    validateInvokeChannel(channels.ACP_SET_CONFIG_OPTION);
+    return ipcRenderer.invoke(channels.ACP_SET_CONFIG_OPTION, sessionId, configId, value);
+  },
+
+  acpRespondPermission: (requestId: string, outcome: AcpPermissionOutcome) => {
+    validateInvokeChannel(channels.ACP_RESPOND_PERMISSION);
+    return ipcRenderer.invoke(channels.ACP_RESPOND_PERMISSION, requestId, outcome);
+  },
+
+  acpGetTerminalOutput: (sessionId: string, terminalId: string) => {
+    validateInvokeChannel(channels.ACP_GET_TERMINAL_OUTPUT);
+    return ipcRenderer.invoke(channels.ACP_GET_TERMINAL_OUTPUT, sessionId, terminalId);
+  },
+
+  onAcpPermissionRequest: (
+    callback: (data: AcpPermissionRequestPayload) => void
+  ): (() => void) => {
+    validateOnChannel(channels.ACP_PERMISSION_REQUEST);
+    const handler = (_event: Electron.IpcRendererEvent, data: AcpPermissionRequestPayload) => {
+      callback(data);
+    };
+    ipcRenderer.on(channels.ACP_PERMISSION_REQUEST, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.ACP_PERMISSION_REQUEST, handler);
+    };
+  },
+
+  onAcpAgentStatusChanged: (
+    callback: (data: AcpAgentStatusPayload) => void
+  ): (() => void) => {
+    validateOnChannel(channels.ACP_AGENT_STATUS_CHANGED);
+    const handler = (_event: Electron.IpcRendererEvent, data: AcpAgentStatusPayload) => {
+      callback(data);
+    };
+    ipcRenderer.on(channels.ACP_AGENT_STATUS_CHANGED, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.ACP_AGENT_STATUS_CHANGED, handler);
+    };
+  },
+
+  onAcpOpenApp: (
+    callback: (data: AcpOpenAppPayload) => void
+  ): (() => void) => {
+    validateOnChannel(channels.ACP_OPEN_APP);
+    const handler = (_event: Electron.IpcRendererEvent, data: AcpOpenAppPayload) => {
+      callback(data);
+    };
+    ipcRenderer.on(channels.ACP_OPEN_APP, handler);
+    return () => {
+      ipcRenderer.removeListener(channels.ACP_OPEN_APP, handler);
+    };
+  },
+
+  // Overridden below with the pre-registered listener (like onChatStreamEvent)
+  onAcpSessionUpdate: (
+    _callback: (data: AcpSessionUpdatePayload) => void
+  ): (() => void) => {
+    return () => {};
+  },
 };
 
 // ============================================
@@ -409,6 +527,24 @@ ipcRenderer.on(channels.CHAT_STREAM_EVENT, (_event, data: { streamId: string; ev
 });
 
 // ============================================
+// ACP Session Update Handling
+// Register listener at module load (before contextBridge)
+// ============================================
+
+type AcpSessionUpdateCallback = (data: AcpSessionUpdatePayload) => void;
+const acpSessionUpdateCallbacks: AcpSessionUpdateCallback[] = [];
+
+ipcRenderer.on(channels.ACP_SESSION_UPDATE, (_event, data: AcpSessionUpdatePayload) => {
+  for (const callback of acpSessionUpdateCallbacks) {
+    try {
+      callback(data);
+    } catch (err) {
+      // Silently ignore callback errors
+    }
+  }
+});
+
+// ============================================
 // Expose API to Renderer
 // ============================================
 
@@ -421,6 +557,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const idx = chatStreamCallbacks.indexOf(callback);
       if (idx >= 0) {
         chatStreamCallbacks.splice(idx, 1);
+      }
+    };
+  },
+  // Override onAcpSessionUpdate to use the pre-registered listener
+  onAcpSessionUpdate: (callback: AcpSessionUpdateCallback): (() => void) => {
+    acpSessionUpdateCallbacks.push(callback);
+    return () => {
+      const idx = acpSessionUpdateCallbacks.indexOf(callback);
+      if (idx >= 0) {
+        acpSessionUpdateCallbacks.splice(idx, 1);
       }
     };
   },

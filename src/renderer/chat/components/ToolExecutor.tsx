@@ -18,6 +18,9 @@ export function ToolExecutor() {
   useEffect(() => {
     // Find messages that have finished streaming and have pending tool calls
     for (const message of state.messages) {
+      // Skip ACP agent messages — the agent executes its own tools
+      if (message.backend === 'acp') continue;
+
       // Skip if still streaming
       if (message.isStreaming) continue;
 

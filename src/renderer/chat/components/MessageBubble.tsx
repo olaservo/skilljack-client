@@ -6,6 +6,7 @@
 
 import type { ChatMessage } from '../types';
 import { ToolCallBlock } from './ToolCallBlock';
+import { ThoughtBlock } from './ThoughtBlock';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -20,6 +21,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       data-role={message.role}
     >
       <span className="visually-hidden">{roleLabel}:</span>
+      {message.thoughtContent && (
+        <ThoughtBlock content={message.thoughtContent} streaming={!!message.isStreaming && !message.content} />
+      )}
       <div className="chat-message-bubble">
         {message.content}
         {message.error && (

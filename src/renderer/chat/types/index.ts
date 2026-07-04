@@ -4,6 +4,38 @@
  * Type definitions for the chat drawer and theme system.
  */
 
+import type {
+  AcpCommandView,
+  AcpConfigOptionView,
+  AcpModeStateView,
+  AcpPermissionRequestPayload,
+  AcpPlanEntryView,
+  AcpToolCallView,
+  AcpUiEvent,
+} from '../../../shared/acp-types';
+
+// ============================================
+// Chat Backend
+// ============================================
+
+/** Which engine drives the conversation: built-in AI SDK models or an external ACP agent */
+export type ChatBackend =
+  | { kind: 'ai-sdk'; role: 'doer' | 'dreamer' }
+  | { kind: 'acp'; agentId: string; agentName: string };
+
+export interface AcpSessionState {
+  sessionId: string;
+  agentId: string;
+  cwd: string;
+  status: 'ready' | 'prompting' | 'dead';
+  modes: AcpModeStateView | null;
+  configOptions: AcpConfigOptionView[];
+  availableCommands: AcpCommandView[];
+  plan: AcpPlanEntryView[] | null;
+  activePermission: AcpPermissionRequestPayload | null;
+  usage: { used: number; size: number } | null;
+}
+
 // ============================================
 // Message Types
 // ============================================
@@ -28,6 +60,10 @@ export interface ChatMessage {
   error?: string;
   /** Model config for assistant messages - used for multi-turn continuation */
   modelConfig?: MessageModelConfig;
+  /** Set on messages produced by an ACP agent; ToolExecutor must skip these */
+  backend?: 'acp';
+  /** Accumulated agent thinking (ACP agent_thought_chunk) */
+  thoughtContent?: string;
 }
 
 export interface ChatToolCall {
@@ -44,6 +80,8 @@ export interface ChatToolCall {
     idempotentHint?: boolean;
     openWorldHint?: boolean;
   };
+  /** Full ACP tool-call view when this call came from an ACP agent */
+  acp?: AcpToolCallView;
 }
 
 export interface ToolCallResult {
@@ -126,6 +164,10 @@ export interface ChatState {
   error: string | null;
   /** Current turn in multi-turn tool workflow (0 = first turn) */
   currentTurn: number;
+  /** Which engine drives the conversation */
+  backend: ChatBackend;
+  /** Live ACP session (null until first prompt on an ACP backend) */
+  acpSession: AcpSessionState | null;
 }
 
 export type ChatAction =
@@ -150,7 +192,14 @@ export type ChatAction =
   | { type: 'CLEAR_MESSAGES' }
   | { type: 'NEW_SESSION' }
   | { type: 'INCREMENT_TURN' }
-  | { type: 'RESET_TURN' };
+  | { type: 'RESET_TURN' }
+  // ACP actions
+  | { type: 'SET_BACKEND'; backend: ChatBackend }
+  | { type: 'ACP_SESSION_STARTED'; session: AcpSessionState }
+  | { type: 'ACP_SESSION_ENDED' }
+  | { type: 'ACP_EVENT'; sessionId: string; event: AcpUiEvent }
+  | { type: 'ACP_PERMISSION_REQUEST'; payload: AcpPermissionRequestPayload }
+  | { type: 'ACP_PERMISSION_CLEARED'; requestId: string };
 
 // ============================================
 // Theme Types
