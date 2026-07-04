@@ -50,13 +50,15 @@ const SANDBOX_PROXY_HTML = `<!DOCTYPE html>
     function buildCspMetaTag(csp) {
       const resourceDomains = (csp?.resourceDomains || []).join(' ');
       const connectDomains = (csp?.connectDomains || []).join(' ');
+      // esm.sh is used for loading MCP ext-apps bridge
+      const esmSh = 'https://esm.sh';
       const directives = [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: " + resourceDomains,
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: " + esmSh + " " + resourceDomains,
         "style-src 'self' 'unsafe-inline' blob: data: " + resourceDomains,
         "img-src 'self' data: blob: " + resourceDomains,
         "font-src 'self' data: blob: " + resourceDomains,
-        "connect-src 'self' " + connectDomains,
+        "connect-src 'self' " + esmSh + " " + connectDomains,
         "frame-src 'none'",
         "object-src 'none'",
         "base-uri 'self'"
@@ -131,14 +133,16 @@ export function buildCspMetaTag(csp?: {
 }): string {
   const resourceDomains = (csp?.resourceDomains || []).join(' ');
   const connectDomains = (csp?.connectDomains || []).join(' ');
+  // esm.sh is used for loading MCP ext-apps bridge
+  const esmSh = 'https://esm.sh';
 
   const directives = [
     "default-src 'self'",
-    `script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: ${resourceDomains}`.trim(),
+    `script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data: ${esmSh} ${resourceDomains}`.trim(),
     `style-src 'self' 'unsafe-inline' blob: data: ${resourceDomains}`.trim(),
     `img-src 'self' data: blob: ${resourceDomains}`.trim(),
     `font-src 'self' data: blob: ${resourceDomains}`.trim(),
-    `connect-src 'self' ${connectDomains}`.trim(),
+    `connect-src 'self' ${esmSh} ${connectDomains}`.trim(),
     "frame-src 'none'",
     "object-src 'none'",
     "base-uri 'self'",
