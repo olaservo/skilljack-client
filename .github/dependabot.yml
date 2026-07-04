@@ -1,0 +1,25 @@
+# Dependabot configuration
+# Alerts + security updates are enabled in repo Settings > Security.
+# This file adds scheduled version-update PRs for the app and its workspace packages.
+# Note: only the directories listed here are scanned — vendored clones under .inbox/ are excluded.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directories:
+      - "/"
+      - "/packages/*"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Batch low-risk bumps into a single PR each to reduce noise; majors still get their own PR.
+      production-minor-patch:
+        dependency-type: "production"
+        update-types:
+          - "minor"
+          - "patch"
+      development-minor-patch:
+        dependency-type: "development"
+        update-types:
+          - "minor"
+          - "patch"
