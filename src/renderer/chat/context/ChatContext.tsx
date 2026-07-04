@@ -29,7 +29,8 @@ import type {
 } from '../types';
 import { useSettings } from '../../settings';
 import { useCommunication } from '../../hooks/useCommunication';
-import type { StreamEvent } from '../../../shared/types';
+import type { StreamEvent, AnnotatedContentItem } from '../../../shared/types';
+import { isForAssistant } from '../../../shared/content-annotations.js';
 
 // ============================================
 // Initial State
@@ -41,6 +42,29 @@ function generateId(): string {
 
 function generateSessionId(): string {
   return `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Filter tool result content by audience for LLM context.
+ * Only includes content intended for the assistant/LLM.
+ */
+function filterContentForAssistant(content: unknown): unknown {
+  // If not an array, return as-is (no annotations to filter)
+  if (!Array.isArray(content)) {
+    return content;
+  }
+
+  // Filter array items by audience
+  const filtered = content.filter((item) => {
+    // If item doesn't have annotations structure, include it (default: both audiences)
+    if (typeof item !== 'object' || item === null) {
+      return true;
+    }
+    const annotatedItem = item as AnnotatedContentItem;
+    return isForAssistant(annotatedItem.annotations);
+  });
+
+  return filtered;
 }
 
 const initialState: ChatState = {
@@ -404,12 +428,13 @@ export function ChatProvider({ children }: ChatProviderProps) {
               }
 
               // Add tool result message for completed calls
+              // Filter content by audience - only include assistant-targeted content
               if (completedCalls.length > 0) {
                 const toolResults = completedCalls.map((tc) => ({
                   type: 'tool-result',
                   toolCallId: tc.id,
                   toolName: tc.qualifiedName,
-                  result: tc.result!.content,
+                  result: filterContentForAssistant(tc.result!.content),
                   isError: tc.result!.isError,
                 }));
                 chatMessages.push({ role: 'tool', content: toolResults });
@@ -569,12 +594,13 @@ export function ChatProvider({ children }: ChatProviderProps) {
               }
 
               // Add tool result message for completed calls
+              // Filter content by audience - only include assistant-targeted content
               if (completedCalls.length > 0) {
                 const toolResults = completedCalls.map((tc) => ({
                   type: 'tool-result',
                   toolCallId: tc.id,
                   toolName: tc.qualifiedName,
-                  result: tc.result!.content,
+                  result: filterContentForAssistant(tc.result!.content),
                   isError: tc.result!.isError,
                 }));
                 chatMessages.push({ role: 'tool', content: toolResults });
