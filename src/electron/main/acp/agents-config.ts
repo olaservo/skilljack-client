@@ -29,8 +29,8 @@ const DEFAULT_AGENTS: Record<string, AcpAgentConfig> = {
   },
   codex: {
     displayName: 'Codex',
-    command: 'codex-acp',
-    args: [],
+    command: 'npx',
+    args: ['-y', '@agentclientprotocol/codex-acp'],
     env: {},
     defaultSessionCwd: null,
     enabled: true,
