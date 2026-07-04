@@ -41,3 +41,6 @@ nul
 # Documentation (local only)
 docs/architecture-plan.md
 docs/electron-esm-cjs-fix.md
+
+# Ignore any folder named .inbox at any depth
+.inbox/
