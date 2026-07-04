@@ -63,6 +63,29 @@ const TOOL_SCHEMAS: Record<string, Record<string, unknown>> = {
   'server-config__disable-server': (DisableServerSchema as ZodObjectLike).shape,
 };
 
+/**
+ * Strip Skilljack-internal fields (audience/priority annotations) from
+ * tool result content. They are valid MCP, but strict agent-side MCP
+ * clients (e.g. Codex's Rust client) reject results carrying them with
+ * "Unexpected response type", and they only matter to Skilljack's own UI.
+ */
+function sanitizeContent(content: unknown): unknown {
+  if (!Array.isArray(content)) return content;
+  return content.map((item) => {
+    if (item && typeof item === 'object') {
+      const record = item as Record<string, unknown>;
+      if (record.type === 'text') {
+        return { type: 'text', text: record.text };
+      }
+      if ('annotations' in record) {
+        const { annotations: _dropped, ...rest } = record;
+        return rest;
+      }
+    }
+    return item;
+  });
+}
+
 function buildBridgeServer(options: ConfigBridgeOptions): McpServer {
   const { getMcpManager, openApp } = options;
   const server = new McpServer(
@@ -138,7 +161,7 @@ function buildBridgeServer(options: ConfigBridgeOptions): McpServer {
             tool.name,
             (args ?? {}) as Record<string, unknown>
           );
-          return { content: result.content, isError: result.isError };
+          return { content: sanitizeContent(result.content), isError: result.isError };
         } catch (err) {
           return {
             content: [{ type: 'text', text: err instanceof Error ? err.message : String(err) }],
