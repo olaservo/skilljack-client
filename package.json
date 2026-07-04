@@ -51,7 +51,7 @@
     "@skilljack/internal-tool-manager": "workspace:*",
     "@skilljack/internal-server-config": "workspace:*",
     "ai": "^6.0.27",
-    "dotenv": "^16.4.0",
+    "dotenv": "^17.4.2",
     "electron-log": "^5.4.4",
     "electron-squirrel-startup": "^1.0.1",
     "electron-store": "^11.0.2",
