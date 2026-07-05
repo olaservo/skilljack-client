@@ -23,6 +23,7 @@ Skilljack can now spawn and drive external coding agents (Claude Code, Codex) ov
 
 ### Fixed
 
+- `mcp-server-manager` (0.2.0): every stdio MCP server ran as two OS processes (a ProcessManager copy plus the SDK transport's copy), with crash detection watching the idle one — the SDK transport is now the sole process owner and crash detection uses the client's close callback (#48)
 - `electron:dev` was broken since the Vite 8 bump: module-level `fileURLToPath(import.meta.url)` in the internal packages crashed the CJS main bundle; now resolved lazily
 - Standalone package servers advertised empty tool input schemas (Zod object passed where the SDK expects a raw shape)
 - Content annotations are stripped at the ACP config bridge boundary as an interop workaround for Codex's MCP client (openai/codex#29002)
