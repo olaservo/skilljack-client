@@ -4,7 +4,10 @@
 
 import { EventEmitter } from 'node:events';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import {
+  StdioClientTransport,
+  getDefaultEnvironment,
+} from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type {
   ServerConfig,
@@ -22,7 +25,6 @@ import type {
 import { createInitialState, toStateSummary } from '../types/state.js';
 import type { LifecycleEvent, LifecycleEventMap } from '../types/events.js';
 import { HealthMonitor } from './health-monitor.js';
-import { ProcessManager } from './process-manager.js';
 import { HttpConnection } from './http-connection.js';
 import { calculateBackoff, delay } from '../utils/retry.js';
 import { createLogger, type Logger } from '../utils/logger.js';
@@ -33,7 +35,9 @@ import { createLogger, type Logger } from '../utils/logger.js';
 const VALID_TRANSITIONS: Record<ServerStatus, ServerStatus[]> = {
   disconnected: ['connecting', 'stopped'],
   connecting: ['connected', 'failed', 'stopped'],
-  connected: ['unhealthy', 'disconnected', 'stopped'],
+  // 'restarting' and 'failed': a connected server's process can die at any
+  // moment (crash detection via the transport close callback)
+  connected: ['unhealthy', 'disconnected', 'stopped', 'restarting', 'failed'],
   unhealthy: ['connected', 'restarting', 'stopped'],
   restarting: ['connecting', 'failed', 'stopped'],
   failed: ['connecting', 'stopped'],
@@ -52,7 +56,6 @@ export class ServerLifecycle extends EventEmitter {
   private state: ServerState;
   private client: Client | null = null;
   private transport: StdioClientTransport | StreamableHTTPClientTransport | null = null;
-  private processManager: ProcessManager | null = null;
   private httpConnection: HttpConnection | null = null;
   private healthMonitor: HealthMonitor | null = null;
 
@@ -152,12 +155,6 @@ export class ServerLifecycle extends EventEmitter {
       this.transport = null;
     }
 
-    // Stop process for stdio servers
-    if (this.processManager) {
-      await this.processManager.stop();
-      this.processManager = null;
-    }
-
     // Mark HTTP connection as disconnected
     if (this.httpConnection) {
       this.httpConnection.markDisconnected();
@@ -206,9 +203,16 @@ export class ServerLifecycle extends EventEmitter {
 
       await this.client.connect(this.transport!);
 
+      // Detect unexpected connection loss (stdio child exit, stream close).
+      // Guarded inside the handler so intentional stop/restart closes are ignored.
+      this.client.onclose = () => this.handleUnexpectedClose();
+
       // Update state
       this.transitionTo('connected');
-      this.state.pid = this.processManager?.getPid();
+      this.state.pid =
+        this.transport instanceof StdioClientTransport
+          ? this.transport.pid ?? undefined
+          : undefined;
 
       this.emitEvent({
         type: 'server:connected',
@@ -238,38 +242,31 @@ export class ServerLifecycle extends EventEmitter {
   }
 
   /**
-   * Connects using stdio transport
+   * Connects using stdio transport.
+   *
+   * The SDK transport owns the child process outright. (Historically a
+   * separate ProcessManager also spawned the same command, so every stdio
+   * server ran twice and crash detection watched the idle copy.)
    */
   private async connectStdio(config: StdioServerConfig): Promise<void> {
-    this.processManager = new ProcessManager(
-      this.name,
-      config,
-      this.lifecycleConfig.shutdownTimeoutMs,
-      this.logger
-    );
-
-    // Set up process event handlers
-    this.processManager.on('exited', (code, signal) => {
-      this.handleProcessExit(code, signal);
-    });
-
-    this.processManager.on('error', (error) => {
-      this.logger.error('Process error', { error: error.message });
-    });
-
-    // Start the process
-    const proc = await this.processManager.start();
-
-    // Create stdio transport
-    this.transport = new StdioClientTransport({
+    const transport = new StdioClientTransport({
       command: config.command,
       args: config.args,
-      env: config.env,
+      // Inherit the SDK's safe default environment, overlaid with configured vars
+      env: { ...getDefaultEnvironment(), ...config.env },
       cwd: config.cwd,
-      // Pass the existing process streams
-      // Note: The SDK's StdioClientTransport expects to spawn its own process,
-      // so we may need to refactor this for proper integration
+      stderr: 'pipe',
     });
+
+    // The stderr PassThrough is available immediately; forward server logs
+    transport.stderr?.on('data', (chunk: Buffer) => {
+      const text = chunk.toString('utf8').trimEnd();
+      if (text) {
+        this.logger.info('stderr', { output: text });
+      }
+    });
+
+    this.transport = transport;
   }
 
   /**
@@ -291,15 +288,15 @@ export class ServerLifecycle extends EventEmitter {
   }
 
   /**
-   * Handles process exit for stdio servers
+   * Handles unexpected connection loss (stdio child exit, stream close).
+   * Intentional closes during stop() or performRestart() are ignored.
    */
-  private handleProcessExit(code: number | null, signal: string | null): void {
-    // Don't handle if we requested the stop
-    if (this.stopRequested) {
+  private handleUnexpectedClose(): void {
+    if (this.stopRequested || this.restartInProgress) {
       return;
     }
 
-    this.logger.warn('Process exited unexpectedly', { code, signal });
+    this.logger.warn('Connection closed unexpectedly');
 
     const willRestart =
       this.lifecycleConfig.autoRestartEnabled &&
@@ -309,21 +306,21 @@ export class ServerLifecycle extends EventEmitter {
       type: 'server:crashed',
       serverName: this.name,
       timestamp: new Date(),
-      exitCode: code,
-      signal,
+      // Exit details aren't surfaced through the transport close callback
+      exitCode: null,
+      signal: null,
       willRestart,
     });
 
     // Clean up client
     this.client = null;
     this.transport = null;
-    this.processManager = null;
 
     if (willRestart) {
       void this.performRestart('crashed');
     } else {
       this.transitionTo('failed');
-      this.state.error = `Process exited with code ${code}, signal ${signal}`;
+      this.state.error = 'Connection closed unexpectedly';
     }
   }
 
