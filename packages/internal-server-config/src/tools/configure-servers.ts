@@ -11,8 +11,8 @@ export const ConfigureServersSchema = z.object({});
 // Tool name constant
 export const CONFIGURE_SERVERS_NAME = 'server-config__configure-servers';
 
-// UI resource URI
-export const SERVER_CONFIG_UI_URI = 'builtin://server-config';
+// UI resource URI (ui:// scheme per the MCP Apps extension spec)
+export const SERVER_CONFIG_UI_URI = 'ui://server-config/mcp-app.html';
 
 // Tool configuration
 export const CONFIGURE_SERVERS_TOOL = {
@@ -25,6 +25,8 @@ export const CONFIGURE_SERVERS_TOOL = {
   hasUi: true,
   uiResourceUri: SERVER_CONFIG_UI_URI,
   serverName: 'server-config',
+  // Standard MCP Apps tool→resource linkage (SEP-1865)
+  _meta: { ui: { resourceUri: SERVER_CONFIG_UI_URI } },
   annotations: {
     readOnlyHint: true,
     openWorldHint: false,

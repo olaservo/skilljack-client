@@ -1,6 +1,11 @@
 /**
  * Server factory for running internal-tool-manager as a standalone MCP server.
  */
+import {
+  registerAppResource,
+  registerAppTool,
+  RESOURCE_MIME_TYPE,
+} from '@modelcontextprotocol/ext-apps/server';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
@@ -10,14 +15,6 @@ import { getToolManagerUI } from './ui/index.js';
 
 // Schema for standalone server registration
 const ManageToolsInputSchema = z.object({});
-
-// Tool configuration (following everything server pattern).
-// registerTool expects the Zod RAW SHAPE, not the z.object(...) wrapper.
-const manageToolsConfig = {
-  title: 'Manage Tools',
-  description: MANAGE_TOOLS_TOOL.description,
-  inputSchema: ManageToolsInputSchema.shape,
-};
 
 export interface ServerFactoryResponse {
   server: McpServer;
@@ -49,32 +46,33 @@ export function createServer(): ServerFactoryResponse {
     }
   );
 
-  // Register the manage-tools tool
-  // Using type assertion to avoid TypeScript type recursion issue with SDK generics
-  (server.registerTool as Function)(
+  // Register the manage-tools tool with the standard MCP Apps
+  // _meta.ui.resourceUri linkage (SEP-1865)
+  registerAppTool(
+    server,
     'manage-tools',
-    manageToolsConfig,
+    {
+      title: MANAGE_TOOLS_TOOL.title,
+      description: MANAGE_TOOLS_TOOL.description,
+      inputSchema: ManageToolsInputSchema.shape,
+      _meta: { ui: { resourceUri: TOOL_MANAGER_UI_URI } },
+      annotations: MANAGE_TOOLS_TOOL.annotations,
+    },
     async (args: unknown): Promise<CallToolResult> => {
       ManageToolsInputSchema.parse(args);
       return handleManageTools();
     }
   );
 
-  // Register the UI resource
-  server.registerResource(
+  // Register the UI resource with the standard MCP Apps mime type
+  registerAppResource(
+    server,
     'tool-manager-ui',
     TOOL_MANAGER_UI_URI,
-    {
-      description: 'HTML UI for managing tools',
-      mimeType: 'text/html;mcp-app',
-    },
-    async (uri) => ({
+    { mimeType: RESOURCE_MIME_TYPE, description: 'HTML UI for managing tools' },
+    async () => ({
       contents: [
-        {
-          uri: uri.toString(),
-          mimeType: 'text/html;mcp-app',
-          text: getToolManagerUI(),
-        },
+        { uri: TOOL_MANAGER_UI_URI, mimeType: RESOURCE_MIME_TYPE, text: getToolManagerUI() },
       ],
     })
   );

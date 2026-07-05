@@ -23,7 +23,9 @@ import {
   CONFIGURE_SERVERS_TOOL,
   SERVER_CONFIG_UI_URI,
   INSTALL_MCPB_NAME,
+  LIST_SERVERS_NAME,
   ListServersSchema,
+  ListServersOutputSchema,
   AddServerSchema,
   RemoveServerSchema,
   RestartServerSchema,
@@ -146,6 +148,10 @@ function buildBridgeServer(options: ConfigBridgeOptions): McpServer {
         title: tool.title,
         description: tool.description,
         inputSchema,
+        // list-servers returns structuredContent matching this schema
+        ...(tool.name === LIST_SERVERS_NAME
+          ? { outputSchema: (ListServersOutputSchema as ZodObjectLike).shape }
+          : {}),
         annotations: tool.annotations,
       },
       async (args: unknown) => {
@@ -161,7 +167,13 @@ function buildBridgeServer(options: ConfigBridgeOptions): McpServer {
             tool.name,
             (args ?? {}) as Record<string, unknown>
           );
-          return { content: sanitizeContent(result.content), isError: result.isError };
+          return {
+            content: sanitizeContent(result.content),
+            ...(result.structuredContent !== undefined
+              ? { structuredContent: result.structuredContent }
+              : {}),
+            isError: result.isError,
+          };
         } catch (err) {
           return {
             content: [{ type: 'text', text: err instanceof Error ? err.message : String(err) }],

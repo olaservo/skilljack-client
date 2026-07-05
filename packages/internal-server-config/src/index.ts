@@ -16,6 +16,7 @@ export {
 
   // Action tools
   ListServersSchema,
+  ListServersOutputSchema,
   LIST_SERVERS_NAME,
   LIST_SERVERS_TOOL,
   AddServerSchema,

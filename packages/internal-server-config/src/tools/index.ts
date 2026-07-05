@@ -11,7 +11,12 @@ export {
 } from './configure-servers.js';
 
 // Action tools
-export { ListServersSchema, LIST_SERVERS_NAME, LIST_SERVERS_TOOL } from './list-servers.js';
+export {
+  ListServersSchema,
+  ListServersOutputSchema,
+  LIST_SERVERS_NAME,
+  LIST_SERVERS_TOOL,
+} from './list-servers.js';
 export { AddServerSchema, ADD_SERVER_NAME, ADD_SERVER_TOOL } from './add-server.js';
 export { RemoveServerSchema, REMOVE_SERVER_NAME, REMOVE_SERVER_TOOL } from './remove-server.js';
 export { RestartServerSchema, RESTART_SERVER_NAME, RESTART_SERVER_TOOL } from './restart-server.js';

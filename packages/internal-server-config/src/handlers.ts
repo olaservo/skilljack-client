@@ -165,6 +165,16 @@ export function createServerConfigHandler(deps: ServerConfigDeps) {
             annotations: { audience: ['assistant'], priority: 0.7 },
           },
         ],
+        // Matches ListServersOutputSchema (tools/list advertises it as outputSchema)
+        structuredContent: {
+          servers: servers.map((s) => ({
+            name: s.name,
+            status: s.status,
+            enabled: s.enabled !== false,
+            toolCount: s.toolCount,
+            ...(s.lastError ? { lastError: s.lastError } : {}),
+          })),
+        },
         serverName: SERVER_NAME,
       };
     }

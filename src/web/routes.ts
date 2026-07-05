@@ -10,7 +10,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { getToolUiResourceUri, fetchUIResource, isToolVisibleToModel } from '../capabilities/apps.js';
+import { getToolUiResourceUri, fetchUIResource, isToolVisibleToModel, RESOURCE_MIME_TYPE } from '../capabilities/apps.js';
 import {
   aggregateTools,
   aggregatePrompts,
@@ -71,12 +71,13 @@ interface ToolWithUIInfo {
 }
 
 /** Built-in tool-manager pseudo-tool */
+const TOOL_MANAGER_UI_URI = 'ui://tool-manager/mcp-app.html';
 const TOOL_MANAGER_TOOL: ToolWithUIInfo = {
   name: 'tool-manager__manage-tools',
   displayName: 'manage-tools',
   description: 'View and enable/disable tools from connected MCP servers',
   hasUi: true,
-  uiResourceUri: 'builtin://tool-manager',
+  uiResourceUri: TOOL_MANAGER_UI_URI,
   serverName: 'tool-manager',
   annotations: {
     readOnlyHint: true,
@@ -300,7 +301,7 @@ export function createMultiServerRouteHandler(
         }
 
         // Handle built-in tool-manager UI resource
-        if (serverName === 'tool-manager' && uri === 'builtin://tool-manager') {
+        if (serverName === 'tool-manager' && uri === TOOL_MANAGER_UI_URI) {
           try {
             // Look for the HTML in static/tool-manager/mcp-app.html
             const staticDir = __dirname.includes('dist')
@@ -310,7 +311,7 @@ export function createMultiServerRouteHandler(
             const html = await readFile(htmlPath, 'utf-8');
             sendJSON(res, {
               uri,
-              mimeType: 'text/html;mcp-app',
+              mimeType: RESOURCE_MIME_TYPE,
               text: html,
               serverName: 'tool-manager',
             });

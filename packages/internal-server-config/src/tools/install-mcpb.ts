@@ -9,7 +9,7 @@ export const InstallMcpbSchema = z.object({
 
 export const INSTALL_MCPB_NAME = 'server-config__install-mcpb';
 
-export const MCPB_CONFIRM_UI_URI = 'builtin://mcpb-confirm';
+export const MCPB_CONFIRM_UI_URI = 'ui://server-config/mcpb-confirm.html';
 
 export const INSTALL_MCPB_TOOL = {
   name: INSTALL_MCPB_NAME,
@@ -21,6 +21,8 @@ export const INSTALL_MCPB_TOOL = {
   hasUi: true,
   uiResourceUri: MCPB_CONFIRM_UI_URI,
   serverName: 'server-config',
+  // Standard MCP Apps tool→resource linkage (SEP-1865)
+  _meta: { ui: { resourceUri: MCPB_CONFIRM_UI_URI } },
   annotations: {
     readOnlyHint: false,
     destructiveHint: false,

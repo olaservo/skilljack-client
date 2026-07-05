@@ -11,8 +11,8 @@ export const ManageToolsSchema = z.object({});
 // Tool name constant
 export const MANAGE_TOOLS_NAME = 'tool-manager__manage-tools';
 
-// UI resource URI
-export const TOOL_MANAGER_UI_URI = 'builtin://tool-manager';
+// UI resource URI (ui:// scheme per the MCP Apps extension spec)
+export const TOOL_MANAGER_UI_URI = 'ui://tool-manager/mcp-app.html';
 
 // Tool configuration
 export const MANAGE_TOOLS_TOOL = {
@@ -25,6 +25,8 @@ export const MANAGE_TOOLS_TOOL = {
   hasUi: true,
   uiResourceUri: TOOL_MANAGER_UI_URI,
   serverName: 'tool-manager',
+  // Standard MCP Apps tool→resource linkage (SEP-1865)
+  _meta: { ui: { resourceUri: TOOL_MANAGER_UI_URI } },
   annotations: {
     readOnlyHint: true,
     openWorldHint: false,
