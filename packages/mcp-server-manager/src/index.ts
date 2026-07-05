@@ -111,7 +111,6 @@ export {
 // Core components (for advanced usage)
 export { ServerLifecycle } from './core/server-lifecycle.js';
 export { HealthMonitor, type HealthMonitorConfig, type HealthMonitorCallbacks } from './core/health-monitor.js';
-export { ProcessManager, type ProcessManagerEvents } from './core/process-manager.js';
 export { HttpConnection, type HttpTransportConfig, createFetchOptions } from './core/http-connection.js';
 
 // Utilities

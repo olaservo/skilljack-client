@@ -300,7 +300,6 @@ For advanced use cases, you can use the underlying components:
 ```typescript
 import {
   ServerLifecycle,
-  ProcessManager,
   HealthMonitor,
   HttpConnection,
 } from '@skilljack/mcp-server-manager';
@@ -332,13 +331,11 @@ const data = await withTimeout(fetchData(), 5000);
 ServerManager
     │
     ├── ServerLifecycle (one per server)
-    │   ├── ProcessManager (stdio transport)
-    │   │   └── Child Process (stdin/stdout pipes)
-    │   │
     │   ├── HttpConnection (http transport)
     │   │
     │   ├── MCP Client
     │   │   └── Transport (StdioClientTransport or StreamableHTTPClientTransport)
+    │   │       └── Child Process for stdio (spawned and owned by the transport)
     │   │
     │   └── HealthMonitor
     │       └── Periodic ping checks
