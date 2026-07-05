@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.3.0] - 2026-07-04
+
+### Added - Agent Client Protocol (ACP) Client Support
+
+Skilljack can now spawn and drive external coding agents (Claude Code, Codex) over [ACP](https://agentclientprotocol.com) v1 as an alternative chat backend, selected from a dropdown in the chat drawer.
+
+- **Main process** (`src/electron/main/acp/`): agent process spawner with Windows `.cmd`/PATHEXT/registry-PATH handling, `ClientSideConnection` wrapper via `@agentclientprotocol/sdk` 1.x, permission broker (blocking approval cards in the chat UI), cwd-sandboxed `fs/read_text_file`/`fs/write_text_file`, full `terminal/*` support with process-tree kill
+- **Agent registry**: user-editable `agents.json` in userData, seeded with Claude Code (`npx -y @agentclientprotocol/claude-agent-acp`) and Codex (`npx -y @agentclientprotocol/codex-acp`); manageable in Settings → Agents
+- **Auth**: provider API keys (`ANTHROPIC_API_KEY` etc.) are stripped from agent environments so agents use the user's subscription logins; per-agent env config can re-add keys explicitly
+- **MCP passthrough**: enabled stdio servers from `servers.json` are forwarded into agent sessions via `session/new`
+- **Config bridge**: a loopback HTTP MCP server (bearer-token auth) exposes Skilljack's server-config tools to agents, backed by the live `McpManager` — agents can list/add/remove/start/stop/enable servers and open the config UI panel in the app
+- **Renderer**: backend selector + working-directory chip, permission cards, plan checklist, collapsible thought blocks, diff and live terminal rendering in tool calls, slash-command autocomplete from the agent, mode/config-option selector
+
+### Changed
+
+- Built-in tool packages now conform to the MCP Apps (ext-apps) spec: `ui://` resource URIs, `text/html;profile=mcp-app` mime type, `_meta.ui.resourceUri` tool linkage, registration via `registerAppTool`/`registerAppResource`; `list-servers` declares an `outputSchema` and returns `structuredContent`
+- `removeServerConfig` removes just the targeted server instead of restarting every server via a full config reload
+- Config UI: "tools hidden" badge for running-but-disabled servers, longer RPC timeout with post-error resync
+- Upgraded `@agentclientprotocol/sdk` to 1.1.0; `@modelcontextprotocol/sdk` to 1.29.0
+- Gemini CLI dropped from built-in agent defaults (no longer maintained; add as a custom agent if needed)
+
+### Fixed
+
+- `electron:dev` was broken since the Vite 8 bump: module-level `fileURLToPath(import.meta.url)` in the internal packages crashed the CJS main bundle; now resolved lazily
+- Standalone package servers advertised empty tool input schemas (Zod object passed where the SDK expects a raw shape)
+- Content annotations are stripped at the ACP config bridge boundary as an interop workaround for Codex's MCP client (openai/codex#29002)
+- Resolved all dependabot alerts via `tar`/`tmp` overrides; `npm audit` clean
+
 ## [0.2.0] - 2025-01-16
 
 ### Added - MCP Apps v0.4.1 Support

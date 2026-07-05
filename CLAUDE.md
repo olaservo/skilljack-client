@@ -23,7 +23,23 @@ npm run electron:dev
 - `packages/internal-tool-manager` - Built-in tool manager (dual-use: standalone server + internal import)
 - `packages/internal-server-config` - Built-in server config tools (dual-use: standalone server + internal import)
 - `src/electron` - Electron main process and preload scripts
+- `src/electron/main/acp` - Agent Client Protocol support (spawns external coding agents as stdio subprocesses)
 - `src/renderer` - React frontend
+
+## ACP (Agent Client Protocol) Support
+
+The chat drawer's backend selector can drive external coding agents (Claude Code, Codex) over [ACP](https://agentclientprotocol.com) v1 instead of the built-in Doer/Dreamer models.
+
+- `AcpManager` (`src/electron/main/acp/acp-manager.ts`) mirrors `McpManager`: agent registry, one `AcpAgentConnection` per running agent process, event fan-out to the renderer over `acp:*` channels. Serializable protocol mirror types live in `src/shared/acp-types.ts` (the renderer never imports `@agentclientprotocol/sdk`).
+- Agent registry is `agents.json` in userData (NOT `servers.json` — entries there are spawned and health-checked as MCP servers at boot). Editable in Settings → Agents.
+- Provider API keys (`ANTHROPIC_API_KEY` etc.) are stripped from agent environments (`agent-spawner.ts` `buildAgentEnv`) so agents use subscription logins; per-agent env config re-adds keys explicitly.
+- Enabled stdio servers from `servers.json` are forwarded into agent sessions. The "config bridge" (`config-bridge.ts`) additionally exposes Skilljack's server-config tools to agents as a loopback HTTP MCP server backed by the live `McpManager`.
+- Interop gotchas: content annotations are stripped at the bridge boundary (Codex's MCP client rejects them — openai/codex#29002); the MCP SDK's `registerTool`/`registerAppTool` need the Zod raw shape (`.shape`), not the `z.object(...)` wrapper, or tools/list advertises empty input schemas.
+- Do not use module-level `fileURLToPath(import.meta.url)` in anything bundled into the Electron main process — Vite's CJS output turns it into a crash at app load. Resolve lazily inside functions instead.
+
+## MCP Apps Conventions
+
+Built-in tools follow the MCP Apps (ext-apps / SEP-1865) spec: `ui://` resource URIs, the `RESOURCE_MIME_TYPE` constant (`text/html;profile=mcp-app`) instead of string literals, `_meta.ui.resourceUri` linkage on UI tools, and `registerAppTool`/`registerAppResource` from `@modelcontextprotocol/ext-apps/server` in the standalone servers. Tools that return data (e.g. `list-servers`) declare an `outputSchema` and return matching `structuredContent` alongside the text summary.
 
 ## Testing Standalone Packages
 

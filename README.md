@@ -1,8 +1,39 @@
 # Skilljack Client
 
-A modular MCP client for showcasing MCP Apps, server-side agents, agent skills, and advanced capabilities.
+A modular MCP client for showcasing MCP Apps, server-side agents, agent skills, and advanced capabilities. Runs as an Electron desktop app (primary) or a legacy CLI/web server.
 
-## Quick Start
+## Quick Start (Electron app)
+
+Build the workspace packages once, then start the app:
+
+```bash
+npm install
+npm run build --workspace @skilljack/mcp-server-manager --workspace @skilljack/internal-tool-manager --workspace @skilljack/internal-server-config
+npm run electron:dev
+```
+
+MCP servers are configured in `servers.json` (repo root or the app's userData directory) and managed live from the in-app config UI or chat.
+
+## Chat Backends: Built-in Models and ACP Agents
+
+The chat drawer's backend selector switches between:
+
+- **Doer / Dreamer** — built-in model configs driven directly via the Vercel AI SDK (Anthropic/OpenAI, requires an API key in `.env`), with client-orchestrated MCP tool calling
+- **ACP agents** — external coding agents driven over the [Agent Client Protocol](https://agentclientprotocol.com): Claude Code and Codex ship as built-in registry entries, and any ACP-speaking agent can be added as a custom entry in Settings → Agents
+
+### ACP agent support
+
+| Feature | Description |
+|---------|-------------|
+| **Full client capabilities** | Permission prompts (blocking approval cards), cwd-sandboxed `fs/read_text_file`/`fs/write_text_file`, all five `terminal/*` methods with process-tree kill |
+| **Subscription auth** | Provider API keys are stripped from agent environments so agents use your existing logins (e.g. `claude login`, ChatGPT); per-agent env config can re-add keys explicitly |
+| **MCP passthrough** | Enabled stdio servers from `servers.json` are forwarded into every agent session |
+| **Config bridge** | Agents receive Skilljack's own server-config tools over a loopback HTTP MCP server backed by the running app — they can list/add/remove/start/stop/enable servers and open the config UI panel |
+| **Rich rendering** | Streamed responses, collapsible thinking, plan checklists, diffs and live terminal output inside tool calls, slash-command autocomplete, agent mode/config selectors |
+
+Agents are registered in `agents.json` (userData), seeded on first run with Claude Code (`npx -y @agentclientprotocol/claude-agent-acp`) and Codex (`npx -y @agentclientprotocol/codex-acp`).
+
+## Legacy CLI / Web Mode
 
 **Single server (stdio):**
 ```bash
