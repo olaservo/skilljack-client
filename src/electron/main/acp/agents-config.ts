@@ -36,15 +36,8 @@ const DEFAULT_AGENTS: Record<string, AcpAgentConfig> = {
     enabled: true,
     builtIn: true,
   },
-  gemini: {
-    displayName: 'Gemini CLI',
-    command: 'gemini',
-    args: ['--experimental-acp'],
-    env: {},
-    defaultSessionCwd: null,
-    enabled: true,
-    builtIn: true,
-  },
+  // Gemini CLI intentionally not seeded: no longer maintained (superseded by
+  // Antigravity). Add it as a custom agent if needed: gemini --experimental-acp
 };
 
 export function getAgentsConfigPath(): string {
