@@ -207,7 +207,8 @@ export function toPermissionOptionViews(options: PermissionOption[]): AcpPermiss
 /** Some agents omit option kind; infer allow/reject from the label. */
 function inferOptionKind(name: string): AcpPermissionOptionView['kind'] {
   const lower = name.toLowerCase();
-  if (/(reject|deny|no|cancel)/.test(lower)) {
+  // Word boundaries: a bare substring test classifies "Allow now" as reject via "no"
+  if (/\b(reject|deny|no|cancel)\b/.test(lower)) {
     return lower.includes('always') ? 'reject_always' : 'reject_once';
   }
   return lower.includes('always') ? 'allow_always' : 'allow_once';

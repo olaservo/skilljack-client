@@ -38,10 +38,17 @@ export async function readTextFile(
     return content;
   }
 
+  // Split without the trailing-sentinel empty string so windows that reach
+  // the end of a newline-terminated file stay byte-faithful to disk
+  const hadTrailingNewline = content.endsWith('\n');
   const lines = content.split('\n');
+  if (hadTrailingNewline) {
+    lines.pop();
+  }
   const start = Math.max(0, (line ?? 1) - 1); // line is 1-based
   const end = limit != null ? start + limit : lines.length;
-  return lines.slice(start, end).join('\n');
+  const slice = lines.slice(start, end).join('\n');
+  return hadTrailingNewline && end >= lines.length ? slice + '\n' : slice;
 }
 
 export async function writeTextFile(

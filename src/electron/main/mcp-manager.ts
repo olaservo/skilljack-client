@@ -1,4 +1,4 @@
-﻿/**
+/**
  * MCP Manager
  *
  * Orchestrates three independent modules:
@@ -829,7 +829,7 @@ export class McpManager {
     await writeFile(configPath, JSON.stringify(fileConfig, null, 2), 'utf-8');
     log.info(`Removed server config: ${name}`);
 
-    // Remove just this server â€” a full loadConfig would restart every
+    // Remove just this server — a full loadConfig would restart every
     // other server and can take long enough that UI requests time out
     if (this.lifecycleManager) {
       try {
