@@ -7,6 +7,7 @@
  * notifications into serializable AcpUiEvents for the renderer.
  */
 
+import { app } from 'electron';
 import { Readable, Writable } from 'node:stream';
 import type { ChildProcess } from 'node:child_process';
 import {
@@ -163,7 +164,7 @@ export class AcpAgentConnection {
           fs: { readTextFile: true, writeTextFile: true },
           terminal: true,
         },
-        clientInfo: { name: 'skilljack-client', version: '0.2.0' },
+        clientInfo: { name: 'skilljack-client', version: app.getVersion() },
       }),
       INITIALIZE_TIMEOUT_MS,
       'initialize'

@@ -1,6 +1,6 @@
 {
   "name": "mcp-skilljack-client",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A full-capability MCP client demonstrating all advanced protocol features",
   "type": "module",
   "main": ".vite/build/main.cjs",
