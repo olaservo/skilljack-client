@@ -1,14 +1,22 @@
 /**
  * Server factory for running internal-server-config as a standalone MCP server.
  */
+import {
+  registerAppResource,
+  registerAppTool,
+  RESOURCE_MIME_TYPE,
+} from '@modelcontextprotocol/ext-apps/server';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
-  ALL_SERVER_CONFIG_TOOLS,
+  SERVER_CONFIG_ACTION_TOOLS,
+  CONFIGURE_SERVERS_TOOL,
+  INSTALL_MCPB_TOOL,
   SERVER_CONFIG_UI_URI,
   MCPB_CONFIRM_UI_URI,
   ConfigureServersSchema,
   ListServersSchema,
+  ListServersOutputSchema,
   AddServerSchema,
   RemoveServerSchema,
   RestartServerSchema,
@@ -145,104 +153,109 @@ export function createServer(): ServerFactoryResponse {
     }
   );
 
-  // Register all tools
-  for (const tool of ALL_SERVER_CONFIG_TOOLS) {
-    // Get the appropriate schema for each tool
-    let inputSchema: z.ZodTypeAny;
-    switch (tool.name) {
-      case 'server-config__configure-servers':
-        inputSchema = ConfigureServersSchema;
-        break;
-      case 'server-config__list-servers':
-        inputSchema = ListServersSchema;
-        break;
-      case 'server-config__add-server':
-        inputSchema = AddServerSchema;
-        break;
-      case 'server-config__remove-server':
-        inputSchema = RemoveServerSchema;
-        break;
-      case 'server-config__restart-server':
-        inputSchema = RestartServerSchema;
-        break;
-      case 'server-config__stop-server':
-        inputSchema = StopServerSchema;
-        break;
-      case 'server-config__start-server':
-        inputSchema = StartServerSchema;
-        break;
-      case 'server-config__enable-server':
-        inputSchema = EnableServerSchema;
-        break;
-      case 'server-config__disable-server':
-        inputSchema = DisableServerSchema;
-        break;
-      case 'server-config__install-mcpb':
-        inputSchema = InstallMcpbSchema;
-        break;
-      default:
-        inputSchema = z.object({});
+  // Wraps the shared handler into an MCP CallToolResult
+  const callHandler = async (toolName: string, args: unknown) => {
+    const result = await handler(toolName, args as Record<string, unknown>);
+    if (result) {
+      return {
+        content: result.content,
+        ...(result.structuredContent !== undefined
+          ? { structuredContent: result.structuredContent }
+          : {}),
+        isError: result.isError,
+      };
     }
+    return {
+      content: [{ type: 'text' as const, text: 'Tool not handled' }],
+      isError: true,
+    };
+  };
 
-    // Using type assertion to avoid TypeScript type recursion issue with SDK generics
+  // UI tools use registerAppTool so tools/list carries the standard
+  // _meta.ui.resourceUri linkage (MCP Apps / SEP-1865).
+  // Function cast avoids TS2589 type recursion in the SDK generics.
+  (registerAppTool as Function)(
+    server,
+    CONFIGURE_SERVERS_TOOL.displayName,
+    {
+      title: CONFIGURE_SERVERS_TOOL.title,
+      description: CONFIGURE_SERVERS_TOOL.description,
+      inputSchema: ConfigureServersSchema.shape,
+      _meta: { ui: { resourceUri: SERVER_CONFIG_UI_URI } },
+      annotations: CONFIGURE_SERVERS_TOOL.annotations,
+    },
+    async (args: unknown) => callHandler(CONFIGURE_SERVERS_TOOL.name, args)
+  );
+
+  (registerAppTool as Function)(
+    server,
+    INSTALL_MCPB_TOOL.displayName,
+    {
+      title: INSTALL_MCPB_TOOL.title,
+      description: INSTALL_MCPB_TOOL.description,
+      inputSchema: InstallMcpbSchema.shape,
+      _meta: { ui: { resourceUri: MCPB_CONFIRM_UI_URI } },
+      annotations: INSTALL_MCPB_TOOL.annotations,
+    },
+    async (args: unknown) => callHandler(INSTALL_MCPB_TOOL.name, args)
+  );
+
+  // Action tools (no UI). registerTool expects the Zod RAW SHAPE, not the
+  // z.object(...) wrapper — passing the object makes tools/list advertise
+  // an empty input schema.
+  const ACTION_SCHEMAS: Record<string, z.ZodObject<z.ZodRawShape>> = {
+    'server-config__list-servers': ListServersSchema,
+    'server-config__add-server': AddServerSchema,
+    'server-config__remove-server': RemoveServerSchema,
+    'server-config__restart-server': RestartServerSchema,
+    'server-config__stop-server': StopServerSchema,
+    'server-config__start-server': StartServerSchema,
+    'server-config__enable-server': EnableServerSchema,
+    'server-config__disable-server': DisableServerSchema,
+  };
+
+  for (const tool of SERVER_CONFIG_ACTION_TOOLS) {
+    if (tool.name === INSTALL_MCPB_TOOL.name) continue; // registered above with UI meta
+    const inputSchema = ACTION_SCHEMAS[tool.name] ?? z.object({});
+
+    // Using type assertion to avoid TypeScript type recursion issue with SDK generics.
     (server.registerTool as Function)(
       tool.displayName,
       {
         title: tool.title,
         description: tool.description,
-        inputSchema,
+        inputSchema: inputSchema.shape,
+        // list-servers returns structuredContent matching this schema
+        ...(tool.name === 'server-config__list-servers'
+          ? { outputSchema: ListServersOutputSchema.shape }
+          : {}),
         annotations: tool.annotations,
       },
-      async (args: unknown) => {
-        const result = await handler(tool.name, args as Record<string, unknown>);
-        if (result) {
-          return {
-            content: result.content,
-            isError: result.isError,
-          };
-        }
-        return {
-          content: [{ type: 'text', text: 'Tool not handled' }],
-          isError: true,
-        };
-      }
+      async (args: unknown) => callHandler(tool.name, args)
     );
   }
 
-  // Register the server-config UI resource
-  server.registerResource(
+  // Register the UI resources with the standard MCP Apps mime type
+  registerAppResource(
+    server,
     'server-config-ui',
     SERVER_CONFIG_UI_URI,
-    {
-      description: 'HTML UI for configuring MCP servers',
-      mimeType: 'text/html;mcp-app',
-    },
-    async (uri) => ({
+    { mimeType: RESOURCE_MIME_TYPE, description: 'HTML UI for configuring MCP servers' },
+    async () => ({
       contents: [
-        {
-          uri: uri.toString(),
-          mimeType: 'text/html;mcp-app',
-          text: getServerConfigUI(),
-        },
+        { uri: SERVER_CONFIG_UI_URI, mimeType: RESOURCE_MIME_TYPE, text: getServerConfigUI() },
       ],
     })
   );
 
-  // Register the MCPB confirmation UI resource
-  server.registerResource(
+  registerAppResource(
+    server,
     'mcpb-confirm-ui',
     MCPB_CONFIRM_UI_URI,
-    {
-      description: 'HTML UI for confirming MCPB installation',
-      mimeType: 'text/html;mcp-app',
-    },
-    async (uri) => ({
+    { mimeType: RESOURCE_MIME_TYPE, description: 'HTML UI for confirming MCPB installation' },
+    async () => ({
       contents: [
-        {
-          uri: uri.toString(),
-          mimeType: 'text/html;mcp-app',
-          text: getMcpbConfirmUI(),
-        },
+        { uri: MCPB_CONFIRM_UI_URI, mimeType: RESOURCE_MIME_TYPE, text: getMcpbConfirmUI() },
       ],
     })
   );

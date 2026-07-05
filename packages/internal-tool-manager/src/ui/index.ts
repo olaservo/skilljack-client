@@ -8,8 +8,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// Resolved lazily: when this package is bundled into the Electron main
+// process (CJS), import.meta.url is unavailable — but that build loads UI
+// HTML via ?raw imports and never calls getToolManagerUI().
+function getModuleDir(): string {
+  return dirname(fileURLToPath(import.meta.url));
+}
 
 // Cache for loaded UI content
 let toolManagerUICache: string | null = null;
@@ -20,7 +24,7 @@ let toolManagerUICache: string | null = null;
  */
 export function getToolManagerUI(): string {
   if (toolManagerUICache === null) {
-    const htmlPath = join(__dirname, 'mcp-app.html');
+    const htmlPath = join(getModuleDir(), 'mcp-app.html');
     toolManagerUICache = readFileSync(htmlPath, 'utf-8');
   }
   return toolManagerUICache;

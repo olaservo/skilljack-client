@@ -8,6 +8,7 @@ import { useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSettings } from './SettingsContext.js';
 import { getModelsForProvider, type Provider, type ModelConfig, type ModelOption } from './types.js';
+import { AgentsSection } from './AgentsSection.js';
 
 const GearIcon = () => (
   <svg className="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -169,6 +170,8 @@ export function SettingsDialog() {
               config={dreamer}
               onChange={setDreamer}
             />
+
+            <AgentsSection />
           </div>
 
           <div className="settings-footer">

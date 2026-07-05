@@ -21,6 +21,7 @@ import {
 import type {
   ChatState,
   ChatAction,
+  ChatBackend,
   ChatMessage,
   ChatToolCall,
   ServerInfo,
@@ -30,6 +31,11 @@ import type {
 import { useSettings } from '../../settings';
 import { useCommunication } from '../../hooks/useCommunication';
 import type { StreamEvent, AnnotatedContentItem } from '../../../shared/types';
+import type {
+  AcpPermissionOutcome,
+  AcpToolCallView,
+  AcpUiEvent,
+} from '../../../shared/acp-types';
 import { isForAssistant } from '../../../shared/content-annotations.js';
 
 // ============================================
@@ -81,7 +87,174 @@ const initialState: ChatState = {
   activeServers: null,
   error: null,
   currentTurn: 0,
+  backend: { kind: 'ai-sdk', role: 'doer' },
+  acpSession: null,
 };
+
+// ============================================
+// ACP Helpers
+// ============================================
+
+/** ACP statuses map so they never hit 'pending' — ToolExecutor must not auto-run them */
+function mapAcpToolStatus(status: AcpToolCallView['status']): ChatToolCall['status'] {
+  switch (status) {
+    case 'completed':
+      return 'completed';
+    case 'failed':
+      return 'failed';
+    default:
+      return 'executing';
+  }
+}
+
+function acpToolCallToChat(view: AcpToolCallView, agentName: string): ChatToolCall {
+  return {
+    id: view.toolCallId,
+    qualifiedName: view.title || view.kind,
+    displayName: view.title || view.kind,
+    serverName: agentName,
+    arguments:
+      view.rawInput && typeof view.rawInput === 'object'
+        ? (view.rawInput as Record<string, unknown>)
+        : {},
+    status: mapAcpToolStatus(view.status),
+    acp: view,
+  };
+}
+
+/** Finalize the streaming ACP message and reset processing flags */
+function finalizeAcpTurn(
+  state: ChatState,
+  suffix: string | null,
+  sessionStatus: 'ready' | 'dead'
+): ChatState {
+  const msgId = state.streamingMessageId;
+  return {
+    ...state,
+    messages: msgId
+      ? state.messages.map((msg) =>
+          msg.id === msgId
+            ? {
+                ...msg,
+                isStreaming: false,
+                content: suffix ? msg.content + suffix : msg.content,
+              }
+            : msg
+        )
+      : state.messages,
+    isProcessing: false,
+    streamingMessageId: null,
+    acpSession: state.acpSession ? { ...state.acpSession, status: sessionStatus } : null,
+  };
+}
+
+function applyAcpEvent(state: ChatState, event: AcpUiEvent): ChatState {
+  const session = state.acpSession;
+  if (!session) return state;
+  const msgId = state.streamingMessageId;
+  const agentName = state.backend.kind === 'acp' ? state.backend.agentName : 'agent';
+
+  switch (event.type) {
+    case 'turn_started':
+      return { ...state, acpSession: { ...session, status: 'prompting' } };
+
+    case 'agent_chunk':
+      if (!msgId) return state;
+      return {
+        ...state,
+        messages: state.messages.map((msg) =>
+          msg.id === msgId ? { ...msg, content: msg.content + event.text } : msg
+        ),
+      };
+
+    case 'thought_chunk':
+      if (!msgId) return state;
+      return {
+        ...state,
+        messages: state.messages.map((msg) =>
+          msg.id === msgId
+            ? { ...msg, thoughtContent: (msg.thoughtContent ?? '') + event.text }
+            : msg
+        ),
+      };
+
+    case 'tool_call_upsert': {
+      if (!msgId) return state;
+      const chatToolCall = acpToolCallToChat(event.toolCall, agentName);
+      return {
+        ...state,
+        messages: state.messages.map((msg) => {
+          if (msg.id !== msgId) return msg;
+          const toolCalls = msg.toolCalls ?? [];
+          const index = toolCalls.findIndex((tc) => tc.id === chatToolCall.id);
+          return {
+            ...msg,
+            toolCalls:
+              index >= 0
+                ? toolCalls.map((tc, i) => (i === index ? chatToolCall : tc))
+                : [...toolCalls, chatToolCall],
+          };
+        }),
+      };
+    }
+
+    case 'plan':
+      return { ...state, acpSession: { ...session, plan: event.entries } };
+
+    case 'available_commands':
+      return { ...state, acpSession: { ...session, availableCommands: event.commands } };
+
+    case 'mode_changed':
+      return {
+        ...state,
+        acpSession: {
+          ...session,
+          modes: session.modes ? { ...session.modes, currentModeId: event.currentModeId } : null,
+        },
+      };
+
+    case 'config_options':
+      return { ...state, acpSession: { ...session, configOptions: event.options } };
+
+    case 'usage': {
+      const used = typeof event.usage.used === 'number' ? event.usage.used : 0;
+      const size = typeof event.usage.size === 'number' ? event.usage.size : 0;
+      return { ...state, acpSession: { ...session, usage: { used, size } } };
+    }
+
+    case 'permission_resolved':
+      if (session.activePermission?.requestId !== event.requestId) return state;
+      return { ...state, acpSession: { ...session, activePermission: null } };
+
+    case 'turn_ended':
+      return finalizeAcpTurn(
+        state,
+        event.stopReason === 'end_turn' ? null : `\n\n[stopped: ${event.stopReason}]`,
+        'ready'
+      );
+
+    case 'turn_error':
+      return finalizeAcpTurn(state, `\n\nError: ${event.message}`, 'ready');
+
+    case 'session_dead': {
+      const next = finalizeAcpTurn(state, null, 'dead');
+      const deadNotice: ChatMessage = {
+        id: generateId(),
+        role: 'system',
+        content: `Agent session ended: ${event.reason}. Your next message will start a new session.`,
+        timestamp: new Date().toISOString(),
+      };
+      return {
+        ...next,
+        messages: [...next.messages, deadNotice],
+        acpSession: next.acpSession ? { ...next.acpSession, activePermission: null } : null,
+      };
+    }
+
+    default:
+      return state;
+  }
+}
 
 // ============================================
 // Reducer
@@ -216,6 +389,38 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         messages: [],
         error: null,
         currentTurn: 0,
+        acpSession: null,
+        isProcessing: false,
+        streamingMessageId: null,
+      };
+
+    case 'SET_BACKEND':
+      return { ...state, backend: action.backend };
+
+    case 'ACP_SESSION_STARTED':
+      return { ...state, acpSession: action.session };
+
+    case 'ACP_SESSION_ENDED':
+      return { ...state, acpSession: null };
+
+    case 'ACP_EVENT':
+      if (!state.acpSession || state.acpSession.sessionId !== action.sessionId) return state;
+      return applyAcpEvent(state, action.event);
+
+    case 'ACP_PERMISSION_REQUEST':
+      if (!state.acpSession || state.acpSession.sessionId !== action.payload.sessionId) {
+        return state;
+      }
+      return {
+        ...state,
+        acpSession: { ...state.acpSession, activePermission: action.payload },
+      };
+
+    case 'ACP_PERMISSION_CLEARED':
+      if (state.acpSession?.activePermission?.requestId !== action.requestId) return state;
+      return {
+        ...state,
+        acpSession: { ...state.acpSession, activePermission: null },
       };
 
     case 'INCREMENT_TURN':
@@ -264,6 +469,15 @@ interface ChatContextValue {
   newSession: () => void;
   /** Continue the conversation after tools have been executed */
   continueAfterTools: (messageId: string) => Promise<void>;
+  // ACP
+  /** Switch the chat backend; starts a fresh conversation */
+  setBackend: (backend: ChatBackend) => void;
+  /** Cancel the in-flight ACP agent turn */
+  cancelAcpTurn: () => void;
+  /** Answer a pending ACP permission request */
+  respondAcpPermission: (requestId: string, outcome: AcpPermissionOutcome) => void;
+  setAcpMode: (modeId: string) => void;
+  setAcpConfigOption: (configId: string, value: string | boolean) => void;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -333,9 +547,92 @@ export function ChatProvider({ children }: ChatProviderProps) {
     []
   );
 
+  // ============================================
+  // ACP send path
+  // ============================================
+
+  const sendAcpMessage = useCallback(
+    async (content: string) => {
+      if (state.backend.kind !== 'acp' || !adapter.acp) return;
+      const acp = adapter.acp;
+      const { agentId, agentName } = state.backend;
+
+      dispatch({ type: 'ADD_TO_HISTORY', value: content });
+      dispatch({ type: 'SET_INPUT', value: '' });
+      addMessage({ role: 'user', content });
+
+      try {
+        let session = state.acpSession;
+        if (!session || session.status === 'dead' || session.agentId !== agentId) {
+          // Resolve the session cwd: the agent's remembered default or a picker
+          const agents = await acp.getAgents();
+          const agent = agents.find((a) => a.id === agentId);
+          let cwd = agent?.defaultSessionCwd ?? null;
+          if (!cwd) {
+            cwd = await acp.pickDirectory();
+            if (!cwd) {
+              addMessage({
+                role: 'system',
+                content: 'Agent sessions need a working directory — pick a folder to continue.',
+              });
+              return;
+            }
+          }
+
+          addMessage({
+            role: 'system',
+            content: `Starting ${agentName} in ${cwd}… (the first run may take a minute)`,
+          });
+          dispatch({ type: 'SET_PROCESSING', isProcessing: true });
+          const result = await acp.newSession(agentId, cwd);
+          session = {
+            sessionId: result.sessionId,
+            agentId,
+            cwd: result.cwd,
+            status: 'ready',
+            modes: result.modes,
+            configOptions: result.configOptions,
+            availableCommands: [],
+            plan: null,
+            activePermission: null,
+            usage: null,
+          };
+          dispatch({ type: 'ACP_SESSION_STARTED', session });
+        }
+
+        const assistantMsg = addMessage({
+          role: 'assistant',
+          content: '',
+          isStreaming: true,
+          backend: 'acp',
+        });
+        dispatch({ type: 'SET_PROCESSING', isProcessing: true });
+        dispatch({ type: 'SET_STREAMING_MESSAGE', id: assistantMsg.id });
+
+        // Returns immediately; turn_ended / turn_error events finalize the message
+        await acp.prompt(session.sessionId, content);
+      } catch (err) {
+        console.error('[Chat] ACP error:', err);
+        addMessage({
+          role: 'system',
+          content: `Agent error: ${err instanceof Error ? err.message : String(err)}`,
+        });
+        dispatch({ type: 'SET_PROCESSING', isProcessing: false });
+        dispatch({ type: 'SET_STREAMING_MESSAGE', id: null });
+      }
+    },
+    [state.backend, state.acpSession, adapter, addMessage]
+  );
+
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim() || state.isProcessing) return;
+
+      // ACP agents own their loop — bypass the AI SDK path entirely
+      if (state.backend.kind === 'acp') {
+        await sendAcpMessage(content.trim());
+        return;
+      }
 
       // Parse slash commands for model selection (Doer vs Dreamer)
       let modelRole: 'doer' | 'dreamer' = 'doer';
@@ -497,8 +794,73 @@ export function ChatProvider({ children }: ChatProviderProps) {
         dispatch({ type: 'SET_STREAMING_MESSAGE', id: null });
       }
     },
-    [state.isProcessing, state.messages, state.servers, state.tools, state.sessionId, addMessage, doer, dreamer, adapter]
+    [state.isProcessing, state.messages, state.servers, state.tools, state.sessionId, state.backend, addMessage, doer, dreamer, adapter, sendAcpMessage]
   );
+
+  // ============================================
+  // ACP actions
+  // ============================================
+
+  const setBackend = useCallback((backend: ChatBackend) => {
+    dispatch({ type: 'SET_BACKEND', backend });
+    dispatch({ type: 'NEW_SESSION' });
+    continuationTriggeredRef.current.clear();
+  }, []);
+
+  const cancelAcpTurn = useCallback(() => {
+    if (state.acpSession && adapter.acp) {
+      adapter.acp.cancel(state.acpSession.sessionId).catch((err) => {
+        console.error('[Chat] ACP cancel failed:', err);
+      });
+    }
+  }, [state.acpSession, adapter]);
+
+  const respondAcpPermission = useCallback(
+    (requestId: string, outcome: AcpPermissionOutcome) => {
+      adapter.acp?.respondPermission(requestId, outcome).catch((err) => {
+        console.error('[Chat] ACP permission response failed:', err);
+      });
+      dispatch({ type: 'ACP_PERMISSION_CLEARED', requestId });
+    },
+    [adapter]
+  );
+
+  const setAcpMode = useCallback(
+    (modeId: string) => {
+      if (state.acpSession && adapter.acp) {
+        adapter.acp.setMode(state.acpSession.sessionId, modeId).catch((err) => {
+          console.error('[Chat] ACP set mode failed:', err);
+        });
+      }
+    },
+    [state.acpSession, adapter]
+  );
+
+  const setAcpConfigOption = useCallback(
+    (configId: string, value: string | boolean) => {
+      if (state.acpSession && adapter.acp) {
+        adapter.acp.setConfigOption(state.acpSession.sessionId, configId, value).catch((err) => {
+          console.error('[Chat] ACP set config option failed:', err);
+        });
+      }
+    },
+    [state.acpSession, adapter]
+  );
+
+  // Subscribe to ACP session updates and permission requests (Electron only)
+  useEffect(() => {
+    if (!adapter.acp) return;
+    const unsubUpdate = adapter.acp.onSessionUpdate(({ sessionId, event }) => {
+      dispatch({ type: 'ACP_EVENT', sessionId, event });
+    });
+    const unsubPermission = adapter.acp.onPermissionRequest((payload) => {
+      dispatch({ type: 'ACP_PERMISSION_REQUEST', payload });
+    });
+    return () => {
+      unsubUpdate();
+      unsubPermission();
+    };
+  }, [adapter]);
 
   /**
    * Continue the conversation after tools have been executed.
@@ -685,6 +1047,9 @@ export function ChatProvider({ children }: ChatProviderProps) {
   // Auto-continue after tools complete (multi-turn workflow)
   // This watches for the last assistant message with completed tool calls
   useEffect(() => {
+    // ACP agents run their own loop — never auto-continue
+    if (state.backend.kind === 'acp') return;
+
     // Skip if processing (already continuing or waiting for stream)
     if (state.isProcessing) return;
 
@@ -732,7 +1097,7 @@ export function ChatProvider({ children }: ChatProviderProps) {
 
     console.log(`[Chat] Auto-continue: Triggering continuation (turn ${state.currentTurn + 1}/${modelConfig.maxTurns})`);
     continueAfterTools(lastAssistantMsg.id);
-  }, [state.messages, state.isProcessing, state.currentTurn, continueAfterTools]);
+  }, [state.messages, state.isProcessing, state.currentTurn, state.backend.kind, continueAfterTools]);
 
   // Fetch servers and tools on mount using communication adapter
   useEffect(() => {
@@ -855,6 +1220,11 @@ export function ChatProvider({ children }: ChatProviderProps) {
     clearMessages,
     newSession,
     continueAfterTools,
+    setBackend,
+    cancelAcpTurn,
+    respondAcpPermission,
+    setAcpMode,
+    setAcpConfigOption,
   };
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;

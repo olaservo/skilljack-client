@@ -5,6 +5,21 @@ import { z } from 'zod';
 
 export const ListServersSchema = z.object({});
 
+/** Structured output for list-servers (drives structuredContent in results) */
+export const ListServersOutputSchema = z.object({
+  servers: z.array(
+    z.object({
+      name: z.string().describe('Server name'),
+      status: z.string().describe('Runtime connection status'),
+      enabled: z
+        .boolean()
+        .describe('Whether the server\'s tools are exposed to models and agents'),
+      toolCount: z.number().describe('Number of tools provided by this server'),
+      lastError: z.string().optional().describe('Last error message, if any'),
+    })
+  ),
+});
+
 export const LIST_SERVERS_NAME = 'server-config__list-servers';
 
 export const LIST_SERVERS_TOOL = {

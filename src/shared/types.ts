@@ -155,6 +155,8 @@ export interface McpTool {
 
 export interface ToolCallResult {
   content: unknown;
+  /** Structured result matching the tool's declared outputSchema, when present */
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
   serverName?: string;
 }

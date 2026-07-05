@@ -13,6 +13,8 @@ import * as path from 'node:path';
 import log from 'electron-log';
 import { setupIPCHandlers, cleanupIPCHandlers } from './ipc-handlers.js';
 import { McpManager } from './mcp-manager.js';
+import { AcpManager } from './acp/acp-manager.js';
+import { setupAcpIpcHandlers, cleanupAcpIpcHandlers } from './acp/acp-ipc-handlers.js';
 
 // Configure logging
 log.transports.file.level = 'info';
@@ -24,6 +26,7 @@ log.transports.console.level = 'debug';
 // Keep a global reference of the window object to prevent garbage collection
 let mainWindow: BrowserWindow | null = null;
 let serverManager: McpManager | null = null;
+let acpManager: AcpManager | null = null;
 
 // Declare __dirname for ESM compatibility (set by Vite)
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
@@ -54,6 +57,13 @@ const createWindow = async (): Promise<void> => {
 
   // Setup IPC handlers with server manager
   setupIPCHandlers(mainWindow, serverManager);
+
+  // Setup ACP agent support (create once; re-bind the window on recreation)
+  if (!acpManager) {
+    acpManager = new AcpManager(() => serverManager);
+    setupAcpIpcHandlers(acpManager);
+  }
+  acpManager.setMainWindow(mainWindow);
 
   // Load the app
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -116,6 +126,11 @@ app.on('window-all-closed', () => {
 app.on('before-quit', async () => {
   log.info('Application quitting, cleaning up...');
   cleanupIPCHandlers();
+  cleanupAcpIpcHandlers();
+  if (acpManager) {
+    acpManager.shutdown();
+    acpManager = null;
+  }
   if (serverManager) {
     await serverManager.shutdown();
     serverManager = null;

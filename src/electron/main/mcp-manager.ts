@@ -33,7 +33,7 @@ import {
   setupAllCapabilities,
   type AggregatedTool,
 } from '../../multi-server.js';
-import { getToolUiResourceUri, fetchUIResource, isToolVisibleToModel } from '../../capabilities/apps.js';
+import { getToolUiResourceUri, fetchUIResource, isToolVisibleToModel, RESOURCE_MIME_TYPE } from '../../capabilities/apps.js';
 import { convertLegacyConfig } from './config-adapter.js';
 import {
   previewMcpb,
@@ -517,6 +517,7 @@ export class McpManager {
       if (result) {
         return {
           content: result.content,
+          structuredContent: result.structuredContent,
           isError: result.isError,
           serverName: result.serverName,
         };
@@ -530,6 +531,7 @@ export class McpManager {
     });
     return {
       content: result.content,
+      structuredContent: result.structuredContent as Record<string, unknown> | undefined,
       isError: result.isError === true,
       serverName,
     };
@@ -600,7 +602,7 @@ export class McpManager {
     if (serverName === 'tool-manager' && uri === TOOL_MANAGER_UI_URI) {
       return {
         uri,
-        mimeType: 'text/html;mcp-app',
+        mimeType: RESOURCE_MIME_TYPE,
         text: TOOL_MANAGER_UI_HTML,
         serverName: 'tool-manager',
       };
@@ -610,7 +612,7 @@ export class McpManager {
     if (serverName === 'server-config' && uri === SERVER_CONFIG_UI_URI) {
       return {
         uri,
-        mimeType: 'text/html;mcp-app',
+        mimeType: RESOURCE_MIME_TYPE,
         text: SERVER_CONFIG_UI_HTML,
         serverName: 'server-config',
       };
@@ -620,7 +622,7 @@ export class McpManager {
     if (serverName === 'server-config' && uri === MCPB_CONFIRM_UI_URI) {
       return {
         uri,
-        mimeType: 'text/html;mcp-app',
+        mimeType: RESOURCE_MIME_TYPE,
         text: MCPB_CONFIRM_UI_HTML,
         serverName: 'server-config',
       };
@@ -637,7 +639,7 @@ export class McpManager {
     if (resource) {
       return {
         uri,
-        mimeType: 'text/html;mcp-app',
+        mimeType: RESOURCE_MIME_TYPE,
         text: resource.html,
         serverName,
       };
@@ -827,8 +829,17 @@ export class McpManager {
     await writeFile(configPath, JSON.stringify(fileConfig, null, 2), 'utf-8');
     log.info(`Removed server config: ${name}`);
 
-    // Reload configuration
-    await this.loadConfig(configPath);
+    // Remove just this server — a full loadConfig would restart every
+    // other server and can take long enough that UI requests time out
+    if (this.lifecycleManager) {
+      try {
+        await this.lifecycleManager.removeServer(name);
+      } catch (err) {
+        log.warn(`Failed to remove server "${name}" from lifecycle manager:`, err);
+      }
+    }
+    this.notifyToolsChanged();
+    this.sendToRenderer(channels.ON_SERVERS_CHANGED, undefined);
   }
 
   // ============================================

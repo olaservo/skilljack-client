@@ -157,6 +157,58 @@ export const CONFIRM_MCPB_INSTALL = 'mcpb:confirm-install';
 export const BROWSE_PATH = 'mcpb:browse-path';
 
 // ============================================
+// ACP (Agent Client Protocol) Channels
+// ============================================
+
+/** Get configured ACP agents with status */
+export const ACP_GET_AGENTS = 'acp:get-agents';
+
+/** Add an ACP agent to agents.json */
+export const ACP_ADD_AGENT = 'acp:add-agent';
+
+/** Update an ACP agent in agents.json */
+export const ACP_UPDATE_AGENT = 'acp:update-agent';
+
+/** Remove an ACP agent from agents.json */
+export const ACP_REMOVE_AGENT = 'acp:remove-agent';
+
+/** Stop a running ACP agent process */
+export const ACP_STOP_AGENT = 'acp:stop-agent';
+
+/** Create a new ACP session (spawns agent if needed) */
+export const ACP_NEW_SESSION = 'acp:new-session';
+
+/** Send a prompt to an ACP session (returns turnId immediately) */
+export const ACP_PROMPT = 'acp:prompt';
+
+/** Cancel the current turn in an ACP session */
+export const ACP_CANCEL = 'acp:cancel';
+
+/** Set the session mode */
+export const ACP_SET_MODE = 'acp:set-mode';
+
+/** Set a session config option */
+export const ACP_SET_CONFIG_OPTION = 'acp:set-config-option';
+
+/** Respond to a pending permission request */
+export const ACP_RESPOND_PERMISSION = 'acp:respond-permission';
+
+/** Poll terminal output for an embedded terminal */
+export const ACP_GET_TERMINAL_OUTPUT = 'acp:get-terminal-output';
+
+/** Session update events (main → renderer, keyed by sessionId) */
+export const ACP_SESSION_UPDATE = 'acp:session-update';
+
+/** Permission request pushed from main (answered via ACP_RESPOND_PERMISSION) */
+export const ACP_PERMISSION_REQUEST = 'acp:permission-request';
+
+/** Agent process status changes (main → renderer) */
+export const ACP_AGENT_STATUS_CHANGED = 'acp:agent-status-changed';
+
+/** Open an MCP App panel on behalf of an agent (main → renderer) */
+export const ACP_OPEN_APP = 'acp:open-app';
+
+// ============================================
 // Settings Channels
 // ============================================
 
@@ -218,6 +270,19 @@ export const INVOKE_CHANNELS = [
   GET_MCPB_PREVIEW_DATA,
   CONFIRM_MCPB_INSTALL,
   BROWSE_PATH,
+  // ACP agents
+  ACP_GET_AGENTS,
+  ACP_ADD_AGENT,
+  ACP_UPDATE_AGENT,
+  ACP_REMOVE_AGENT,
+  ACP_STOP_AGENT,
+  ACP_NEW_SESSION,
+  ACP_PROMPT,
+  ACP_CANCEL,
+  ACP_SET_MODE,
+  ACP_SET_CONFIG_OPTION,
+  ACP_RESPOND_PERMISSION,
+  ACP_GET_TERMINAL_OUTPUT,
 ] as const;
 
 /** Channels that renderer can listen to (main → renderer events) */
@@ -234,6 +299,11 @@ export const ON_CHANNELS = [
   ON_SERVER_CRASHED,
   ON_SERVER_RESTARTING,
   ON_MANAGER_READY,
+  // ACP events
+  ACP_SESSION_UPDATE,
+  ACP_PERMISSION_REQUEST,
+  ACP_AGENT_STATUS_CHANGED,
+  ACP_OPEN_APP,
 ] as const;
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number];

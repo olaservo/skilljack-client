@@ -146,9 +146,11 @@ export function createServerConfigHandler(deps: ServerConfigDeps) {
       const summary = servers
         .map(
           (s) =>
-            `- **${s.name}**: ${s.status} (${s.toolCount} tools)${
-              s.lastError ? ` - Error: ${s.lastError}` : ''
-            }`
+            `- **${s.name}**: ${s.status}${
+              s.enabled === false
+                ? ', DISABLED (tools hidden from models and not offered to agents)'
+                : ''
+            } (${s.toolCount} tools)${s.lastError ? ` - Error: ${s.lastError}` : ''}`
         )
         .join('\n');
 
@@ -158,11 +160,21 @@ export function createServerConfigHandler(deps: ServerConfigDeps) {
             type: 'text',
             text:
               servers.length > 0
-                ? `## Connected Servers\n\n${summary}`
+                ? `## Configured Servers\n\nManagement view of all servers configured in Skilljack, including disabled ones.\n\n${summary}`
                 : 'No servers configured. Use add-server to add one.',
             annotations: { audience: ['assistant'], priority: 0.7 },
           },
         ],
+        // Matches ListServersOutputSchema (tools/list advertises it as outputSchema)
+        structuredContent: {
+          servers: servers.map((s) => ({
+            name: s.name,
+            status: s.status,
+            enabled: s.enabled !== false,
+            toolCount: s.toolCount,
+            ...(s.lastError ? { lastError: s.lastError } : {}),
+          })),
+        },
         serverName: SERVER_NAME,
       };
     }

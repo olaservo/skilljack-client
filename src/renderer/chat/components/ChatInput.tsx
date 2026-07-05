@@ -17,9 +17,28 @@ const SendIcon = () => (
   </svg>
 );
 
+const StopIcon = () => (
+  <svg className="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+    <rect x="6" y="6" width="12" height="12" rx="1" />
+  </svg>
+);
+
 export function ChatInput() {
-  const { state, setInput, sendMessage, navigateHistory } = useChat();
+  const { state, setInput, sendMessage, navigateHistory, cancelAcpTurn } = useChat();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const isAcp = state.backend.kind === 'acp';
+  const permissionPending = !!state.acpSession?.activePermission;
+  const acpPrompting = isAcp && state.acpSession?.status === 'prompting';
+  const inputDisabled = state.isProcessing || permissionPending;
+
+  // Slash-command suggestions advertised by the ACP agent
+  const commandSuggestions =
+    isAcp && state.inputValue.startsWith('/') && !state.inputValue.includes(' ')
+      ? (state.acpSession?.availableCommands ?? []).filter((command) =>
+          `/${command.name}`.startsWith(state.inputValue)
+        )
+      : [];
 
   // Auto-focus textarea on initial load
   useEffect(() => {
@@ -74,7 +93,7 @@ export function ChatInput() {
       // Enter to send (without Shift)
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        if (state.inputValue.trim() && !state.isProcessing) {
+        if (state.inputValue.trim() && !inputDisabled) {
           sendMessage(state.inputValue);
         }
         return;
@@ -101,7 +120,7 @@ export function ChatInput() {
         return;
       }
     },
-    [state.inputValue, state.isProcessing, sendMessage, navigateHistory]
+    [state.inputValue, inputDisabled, sendMessage, navigateHistory]
   );
 
   const handleChange = useCallback(
@@ -117,13 +136,32 @@ export function ChatInput() {
   );
 
   const handleSend = useCallback(() => {
-    if (state.inputValue.trim() && !state.isProcessing) {
+    if (state.inputValue.trim() && !inputDisabled) {
       sendMessage(state.inputValue);
     }
-  }, [state.inputValue, state.isProcessing, sendMessage]);
+  }, [state.inputValue, inputDisabled, sendMessage]);
 
   return (
     <div className="chat-input-area">
+      {commandSuggestions.length > 0 && (
+        <div className="chat-command-suggestions">
+          {commandSuggestions.slice(0, 8).map((command) => (
+            <button
+              key={command.name}
+              className="chat-command-suggestion"
+              onClick={() => {
+                setInput(`/${command.name} `);
+                textareaRef.current?.focus();
+              }}
+            >
+              <span className="chat-command-name">/{command.name}</span>
+              {command.description && (
+                <span className="chat-command-description">{command.description}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="chat-input-wrapper">
         <span className="chat-input-prompt">&gt;</span>
         <textarea
@@ -132,20 +170,35 @@ export function ChatInput() {
           value={state.inputValue}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
-          placeholder="Type a message..."
-          disabled={state.isProcessing}
+          placeholder={
+            permissionPending
+              ? 'Waiting for permission decision above…'
+              : 'Type a message...'
+          }
+          disabled={inputDisabled}
           rows={1}
           aria-label="Chat message input"
         />
-        <button
-          className="chat-send-button"
-          onClick={handleSend}
-          disabled={!state.inputValue.trim() || state.isProcessing}
-          aria-label="Send message"
-          title="Send message (Enter)"
-        >
-          <SendIcon />
-        </button>
+        {acpPrompting ? (
+          <button
+            className="chat-send-button chat-stop-button"
+            onClick={cancelAcpTurn}
+            aria-label="Stop agent"
+            title="Stop the agent's current turn"
+          >
+            <StopIcon />
+          </button>
+        ) : (
+          <button
+            className="chat-send-button"
+            onClick={handleSend}
+            disabled={!state.inputValue.trim() || inputDisabled}
+            aria-label="Send message"
+            title="Send message (Enter)"
+          >
+            <SendIcon />
+          </button>
+        )}
       </div>
     </div>
   );

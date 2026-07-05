@@ -16,6 +16,8 @@ import { ChatInput } from './ChatInput';
 import { ServerStatus } from './ServerStatus';
 import { ThemeToggle } from './ThemeToggle';
 import { ToolExecutor } from './ToolExecutor';
+import { BackendSelector } from './BackendSelector';
+import { ModeSelector } from './ModeSelector';
 import { SettingsDialog } from '../../settings';
 
 // Icons
@@ -110,6 +112,8 @@ export function ChatDrawer({ alwaysOpen = false }: ChatDrawerProps) {
           <div className="chat-drawer-title">
             <TerminalIcon />
             <span>Terminal</span>
+            <BackendSelector />
+            <ModeSelector />
             <ServerStatus servers={state.servers} />
           </div>
           <div className="chat-drawer-actions">

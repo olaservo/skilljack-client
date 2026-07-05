@@ -24,6 +24,43 @@ import type {
   ServerRestartingPayload,
   ManagerReadyPayload,
 } from '../shared/types.js';
+import type {
+  AcpAgentConfig,
+  AcpAgentInfo,
+  AcpAgentStatusPayload,
+  AcpNewSessionResult,
+  AcpOpenAppPayload,
+  AcpPermissionOutcome,
+  AcpPermissionRequestPayload,
+  AcpSessionUpdatePayload,
+  AcpTerminalOutputResult,
+} from '../shared/acp-types.js';
+
+// ============================================
+// ACP Adapter Interface (Electron-only)
+// ============================================
+
+export interface AcpAdapter {
+  /** Open a native directory picker; resolves null if cancelled */
+  pickDirectory(): Promise<string | null>;
+  getAgents(): Promise<AcpAgentInfo[]>;
+  addAgent(id: string, config: AcpAgentConfig): Promise<{ success: boolean }>;
+  updateAgent(id: string, updates: Partial<AcpAgentConfig>): Promise<{ success: boolean }>;
+  removeAgent(id: string): Promise<{ success: boolean }>;
+  stopAgent(id: string): Promise<{ success: boolean }>;
+  newSession(agentId: string, cwd: string): Promise<AcpNewSessionResult>;
+  prompt(sessionId: string, text: string): Promise<{ turnId: string }>;
+  cancel(sessionId: string): Promise<void>;
+  setMode(sessionId: string, modeId: string): Promise<void>;
+  setConfigOption(sessionId: string, configId: string, value: string | boolean): Promise<void>;
+  respondPermission(requestId: string, outcome: AcpPermissionOutcome): Promise<void>;
+  getTerminalOutput(sessionId: string, terminalId: string): Promise<AcpTerminalOutputResult>;
+  onSessionUpdate(callback: (data: AcpSessionUpdatePayload) => void): () => void;
+  onPermissionRequest(callback: (data: AcpPermissionRequestPayload) => void): () => void;
+  onAgentStatusChanged(callback: (data: AcpAgentStatusPayload) => void): () => void;
+  /** Agent asked to open an MCP App panel (e.g. the server-config UI) */
+  onOpenApp(callback: (data: AcpOpenAppPayload) => void): () => void;
+}
 
 // ============================================
 // Core Adapter Interface
@@ -71,6 +108,9 @@ export interface CommunicationAdapter {
 
   // Events (for real-time updates)
   onEvent(handler: (event: WebSocketEvent) => void): () => void;
+
+  // ACP agents (Electron-only; undefined in web/HTTP mode)
+  acp?: AcpAdapter;
 
   // Cleanup
   dispose(): void;
@@ -159,6 +199,34 @@ export interface ElectronAPI {
   minimizeWindow(): void;
   maximizeWindow(): void;
   closeWindow(): void;
+
+  // File/directory picker (registered under the mcpb:browse-path channel)
+  browsePath(type: 'file' | 'directory'): Promise<{ path: string | undefined }>;
+
+  // ACP agents
+  acpGetAgents(): Promise<{ agents: AcpAgentInfo[] }>;
+  acpAddAgent(id: string, config: AcpAgentConfig): Promise<{ success: boolean }>;
+  acpUpdateAgent(id: string, updates: Partial<AcpAgentConfig>): Promise<{ success: boolean }>;
+  acpRemoveAgent(id: string): Promise<{ success: boolean }>;
+  acpStopAgent(id: string): Promise<{ success: boolean }>;
+  acpNewSession(agentId: string, cwd: string): Promise<AcpNewSessionResult>;
+  acpPrompt(sessionId: string, text: string): Promise<{ turnId: string }>;
+  acpCancel(sessionId: string): Promise<{ success: boolean }>;
+  acpSetMode(sessionId: string, modeId: string): Promise<{ success: boolean }>;
+  acpSetConfigOption(
+    sessionId: string,
+    configId: string,
+    value: string | boolean
+  ): Promise<{ success: boolean }>;
+  acpRespondPermission(
+    requestId: string,
+    outcome: AcpPermissionOutcome
+  ): Promise<{ success: boolean }>;
+  acpGetTerminalOutput(sessionId: string, terminalId: string): Promise<AcpTerminalOutputResult>;
+  onAcpSessionUpdate(callback: (data: AcpSessionUpdatePayload) => void): () => void;
+  onAcpPermissionRequest(callback: (data: AcpPermissionRequestPayload) => void): () => void;
+  onAcpAgentStatusChanged(callback: (data: AcpAgentStatusPayload) => void): () => void;
+  onAcpOpenApp(callback: (data: AcpOpenAppPayload) => void): () => void;
 }
 
 // Extend Window interface for TypeScript

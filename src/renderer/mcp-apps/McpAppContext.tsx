@@ -298,6 +298,19 @@ export function McpAppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [openPanel, state.panels]);
 
+  /**
+   * Open panels on behalf of ACP agents (e.g. agent calls configure-servers
+   * through the config bridge and main pushes an open-app event)
+   */
+  useEffect(() => {
+    if (!adapter.acp) return;
+    return adapter.acp.onOpenApp(({ serverName, uiResourceUri }) => {
+      openPanel(serverName, uiResourceUri, {}, null).catch((err) => {
+        console.error('[McpApp] Failed to open panel for agent:', err);
+      });
+    });
+  }, [adapter, openPanel]);
+
   // Convert Map to array for easier rendering
   const panelsArray = useMemo(() => Array.from(state.panels.values()), [state.panels]);
 
